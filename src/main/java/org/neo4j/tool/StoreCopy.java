@@ -135,11 +135,10 @@ public class StoreCopy {
 
     private static void copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, long highestNodeId) {
         long time = System.currentTimeMillis();
-        int node = 0;
-        while (node <= highestNodeId) {
+        int node = -1;
+        while (++node <= highestNodeId) {
             if (!sourceDb.nodeExists(node)) continue;
             targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node));
-            node++;
             if (node % 1000 == 0) System.out.print(".");
             if (node % 100000 == 0) {
                 logs.flush();
