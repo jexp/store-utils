@@ -13,8 +13,11 @@ Change the Neo4j version in pom.xml before running. (Currently 1.9.5)
 
 Usage:
 
-    mvn compile exec:java -Dexec.mainClass="org.neo4j.tool.StoreCopy" \
-      -Dexec.args="source-dir target-dir [rel,types,to,ignore] [properties,to,ignore] [labels,to,ignore]"
+    # build the JAR for your version of Neo4j
+    mvn clean compile assembly:single
+
+    # run the store copy tool against your store
+    java -jar target/store-util-2.0.1-jar-with-dependencies.jar source-dir target-dir [rel,types,to,ignore] [properties,to,ignore] [labels,to,ignore]
 
 # Store Compare
 
