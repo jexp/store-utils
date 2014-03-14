@@ -2,15 +2,16 @@ package org.neo4j.tool;
 
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
-import org.neo4j.helpers.ArrayUtil;
+import org.neo4j.helpers.Pair;
 import org.neo4j.helpers.collection.IteratorUtil;
 import org.neo4j.helpers.collection.MapUtil;
-import org.neo4j.kernel.EmbeddedGraphDatabase;
+import org.neo4j.kernel.GraphDatabaseAPI;
+import org.neo4j.kernel.impl.core.NodeManager;
 import org.neo4j.kernel.impl.nioneo.store.InvalidRecordException;
 import org.neo4j.kernel.impl.util.FileUtils;
 import org.neo4j.unsafe.batchinsert.BatchInserter;
-import org.neo4j.unsafe.batchinsert.BatchInserterImpl;
 import org.neo4j.unsafe.batchinsert.BatchInserters;
+import org.neo4j.unsafe.batchinsert.BatchRelationship;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -27,8 +28,8 @@ public class StoreCopy {
     private static PrintWriter logs;
 
     @SuppressWarnings("unchecked")
-    public static Map<String,String> config() {
-        return (Map)MapUtil.map(
+    public static Map<String, String> config() {
+        return (Map) MapUtil.map(
                 "neostore.nodestore.db.mapped_memory", "100M",
                 "neostore.relationshipstore.db.mapped_memory", "500M",
                 "neostore.propertystore.db.mapped_memory", "300M",
@@ -39,17 +40,18 @@ public class StoreCopy {
                 "cache_type", "weak"
         );
     }
+
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
             System.err.println("Usage: StoryCopy source target [rel,types,to,ignore] [properties,to,ignore]");
             return;
         }
-        String sourceDir=args[0];
-        String targetDir=args[1];
-        Set<String> ignoreRelTypes= splitOptionIfExists(args, 2);
-        Set<String> ignoreProperties= splitOptionIfExists(args,3);
+        String sourceDir = args[0];
+        String targetDir = args[1];
+        Set<String> ignoreRelTypes = splitOptionIfExists(args, 2);
+        Set<String> ignoreProperties = splitOptionIfExists(args, 3);
         System.out.printf("Copying from %s to %s ingoring rel-types %s ignoring properties %s %n", sourceDir, targetDir, ignoreRelTypes, ignoreProperties);
-        copyStore(sourceDir,targetDir,ignoreRelTypes,ignoreProperties);
+        copyStore(sourceDir, targetDir, ignoreRelTypes, ignoreProperties);
     }
 
     private static Set<String> splitOptionIfExists(String[] args, final int index) {
@@ -64,19 +66,29 @@ public class StoreCopy {
             FileUtils.deleteRecursively(target);
             // throw new IllegalArgumentException("Target Directory already exists "+target);
         }
-        if (!source.exists()) throw new IllegalArgumentException("Source Database does not exist "+source);
+        if (!source.exists()) throw new IllegalArgumentException("Source Database does not exist " + source);
 
+        Pair<Long, Long> highestIds = getHighestNodeId(source);
         BatchInserter targetDb = BatchInserters.inserter(target.getAbsolutePath(), config());
-        GraphDatabaseService sourceDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(sourceDir).setConfig(config()).newGraphDatabase();
-        logs=new PrintWriter(new FileWriter(new File(target,"store-copy.log")));
+        BatchInserter sourceDb = BatchInserters.inserter(source.getAbsolutePath(), config());
+        logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
 
-        copyNodes(sourceDb, targetDb, ignoreProperties);
-        copyRelationships(sourceDb, targetDb, ignoreRelTypes,ignoreProperties);
+        copyNodes(sourceDb, targetDb, ignoreProperties, highestIds.first());
+        copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, highestIds.other());
 
         targetDb.shutdown();
         sourceDb.shutdown();
         logs.close();
         copyIndex(source, target);
+    }
+
+    private static Pair<Long, Long> getHighestNodeId(File source) {
+        GraphDatabaseAPI api = (GraphDatabaseAPI) new GraphDatabaseFactory().newEmbeddedDatabase(source.getAbsolutePath());
+        NodeManager nodeManager = api.getDependencyResolver().resolveDependency(NodeManager.class);
+        long highestNodeId = nodeManager.getHighestPossibleIdInUse(Node.class);
+        long highestRelId = nodeManager.getHighestPossibleIdInUse(Relationship.class);
+        api.shutdown();
+        return Pair.of(highestNodeId, highestRelId);
     }
 
     private static void copyIndex(File source, File target) throws IOException {
@@ -90,115 +102,69 @@ public class StoreCopy {
         }
     }
 
-    private static void copyRelationships(GraphDatabaseService sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties) {
+    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, long highestRelId) {
         long time = System.currentTimeMillis();
-        int count=0;
-        try (Transaction tx = sourceDb.beginTx()) {
-            Iterator<Node> allNodes = sourceDb.getAllNodes().iterator();
-            while (allNodes.hasNext()) {
-                Node node;
-                try {
-                    node = allNodes.next();
-                } catch(Exception e) {
-                    e.printStackTrace();
-                    continue;
-                }
-                Iterator<Relationship> outgoingRelationships = getOutgoingRelationships(node).iterator();
-                while (outgoingRelationships.hasNext()) {
-                    Relationship rel;
-                    try {
-                        rel = outgoingRelationships.next();
-                    } catch(Exception e) {
-                        e.printStackTrace();
-                        continue;
-                    }
-                    if (ignoreRelTypes.contains(rel.getType().name().toLowerCase())) continue;
-                    createRelationship(targetDb, rel, ignoreProperties);
-                    count ++;
-                    if (count % 1000 == 0) System.out.print(".");
-                    if (count % 100000 == 0) System.out.println(" " + count);
-                }
+        long relId = 0;
+        long notFound = 0;
+        while (relId <= highestRelId) {
+            BatchRelationship rel = null;
+            try {
+                rel = sourceDb.getRelationshipById(relId++);
+            } catch (InvalidRecordException nfe) {
+                notFound++;
+                continue;
             }
-            tx.success();
+            if (ignoreRelTypes.contains(rel.getType().name().toLowerCase())) continue;
+            createRelationship(targetDb, sourceDb, rel, ignoreProperties);
+            if (relId % 1000 == 0) System.out.print(".");
+            if (relId % 100000 == 0) System.out.println(" " + rel);
         }
-        System.out.println("\n copying of " + count+ " relationships took "+(System.currentTimeMillis()-time)+" ms.");
+        System.out.println("\n copying of "+relId+" relationships took "+(System.currentTimeMillis()-time)+" ms. Not found "+notFound);
     }
 
-    private static void createRelationship(BatchInserter targetDb, Relationship rel, Set<String> ignoreProperties) {
-        long startNodeId=rel.getStartNode().getId();
-        long endNodeId=rel.getEndNode().getId();
+    private static void createRelationship(BatchInserter targetDb, BatchInserter sourceDb, BatchRelationship rel, Set<String> ignoreProperties) {
+        long startNodeId = rel.getStartNode();
+        long endNodeId = rel.getEndNode();
         final RelationshipType type = rel.getType();
         try {
-            targetDb.createRelationship(startNodeId,endNodeId , type, getProperties(rel, ignoreProperties));
+            targetDb.createRelationship(startNodeId, endNodeId, type, getProperties(sourceDb.getRelationshipProperties(rel.getId()), ignoreProperties));
         } catch (InvalidRecordException ire) {
-            addLog(rel,"create Relationship: "+startNodeId+"-[:"+type+"]"+"->"+endNodeId,ire.getMessage());
+            addLog(rel, "create Relationship: " + startNodeId + "-[:" + type + "]" + "->" + endNodeId, ire.getMessage());
         }
     }
 
-    private static Iterable<Relationship> getOutgoingRelationships(Node node) {
-        try {
-            return node.getRelationships(Direction.OUTGOING);
-        } catch(InvalidRecordException ire) {
-            addLog(node,"outgoingRelationships",ire.getMessage());
-            return Collections.emptyList();
-        }
-    }
-
-    private static void copyNodes(GraphDatabaseService sourceDb, BatchInserter targetDb, Set<String> ignoreProperties) {
+    private static void copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, long highestNodeId) {
         long time = System.currentTimeMillis();
-        int count=0;
-        try (Transaction tx = sourceDb.beginTx()) {
-            Iterator<Node> allNodes = sourceDb.getAllNodes().iterator();
-            while (allNodes.hasNext()) {
-                Node node;
-                try {
-                    node = allNodes.next();
-                } catch(Exception e) {
-                    e.printStackTrace();
-                    continue;
-                }
-                targetDb.createNode(node.getId(), getProperties(node, ignoreProperties), labelsArray(node));
-                count++;
-                if (count % 1000 == 0) System.out.print(".");
-                if (count % 100000 == 0) {
-                    logs.flush();
-                    System.out.println(" " + count);
-                }
+        int node = 0;
+        while (node <= highestNodeId) {
+            if (!sourceDb.nodeExists(node)) continue;
+            targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node));
+            node++;
+            if (node % 1000 == 0) System.out.print(".");
+            if (node % 100000 == 0) {
+                logs.flush();
+                System.out.println(" " + node);
             }
-            tx.success();
         }
-        System.out.println("\n copying of " + count+ " nodes took "+(System.currentTimeMillis()-time)+" ms.");
+        System.out.println("\n copying of " + node + " nodes took " + (System.currentTimeMillis() - time) + " ms.");
     }
 
-    private static Label[] labelsArray(Node node) {
-        Collection<Label> labels = IteratorUtil.asCollection(node.getLabels());
+    private static Label[] labelsArray(BatchInserter db, long node) {
+        Collection<Label> labels = IteratorUtil.asCollection(db.getNodeLabels(node));
         if (labels.isEmpty()) return NO_LABELS;
         return labels.toArray(new Label[labels.size()]);
     }
 
-    private static Map<String, Object> getProperties(PropertyContainer pc, Set<String> ignoreProperties) {
-        Map<String,Object> result=new HashMap<String, Object>();
-        for (String property : getPropertyKeys(pc)) {
-            if (ignoreProperties.contains(property.toLowerCase())) continue;
-            try {
-                result.put(property,pc.getProperty(property));
-            } catch(InvalidRecordException ire) {
-                addLog(pc, property, ire.getMessage());
-            }
-        }
-        return result;
+    private static Map<String, Object> getProperties(Map<String, Object> pc, Set<String> ignoreProperties) {
+        if (!ignoreProperties.isEmpty()) pc.keySet().removeAll(ignoreProperties);
+        return pc;
     }
 
-    private static Iterable<String> getPropertyKeys(PropertyContainer pc) {
-        try {
-            return pc.getPropertyKeys();
-        } catch(InvalidRecordException ire) {
-            addLog(pc,"propertyKeys",ire.getMessage());
-            return Collections.emptyList();
-        }
+    private static void addLog(BatchRelationship rel, String property, String message) {
+        logs.append(String.format("%s.%s %s%n", rel, property, message));
     }
 
     private static void addLog(PropertyContainer pc, String property, String message) {
-        logs.append(String.format("%s.%s %s%n",pc,property,message));
+        logs.append(String.format("%s.%s %s%n", pc, property, message));
     }
 }
