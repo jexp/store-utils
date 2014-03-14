@@ -50,8 +50,9 @@ public class StoreCopy {
         String targetDir = args[1];
         Set<String> ignoreRelTypes = splitOptionIfExists(args, 2);
         Set<String> ignoreProperties = splitOptionIfExists(args, 3);
-        System.out.printf("Copying from %s to %s ingoring rel-types %s ignoring properties %s %n", sourceDir, targetDir, ignoreRelTypes, ignoreProperties);
-        copyStore(sourceDir, targetDir, ignoreRelTypes, ignoreProperties);
+        Set<String> ignoreLabels = splitOptionIfExists(args, 4);
+        System.out.printf("Copying from %s to %s ingoring rel-types %s ignoring properties %s ignoring labels %s %n", sourceDir, targetDir, ignoreRelTypes, ignoreProperties,ignoreLabels);
+        copyStore(sourceDir, targetDir, ignoreRelTypes, ignoreProperties,ignoreLabels);
     }
 
     private static Set<String> splitOptionIfExists(String[] args, final int index) {
@@ -59,7 +60,7 @@ public class StoreCopy {
         return new HashSet<String>(asList(args[index].toLowerCase().split(",")));
     }
 
-    private static void copyStore(String sourceDir, String targetDir, Set<String> ignoreRelTypes, Set<String> ignoreProperties) throws Exception {
+    private static void copyStore(String sourceDir, String targetDir, Set<String> ignoreRelTypes, Set<String> ignoreProperties, Set<String> ignoreLabels) throws Exception {
         final File target = new File(targetDir);
         final File source = new File(sourceDir);
         if (target.exists()) {
@@ -73,7 +74,7 @@ public class StoreCopy {
         BatchInserter sourceDb = BatchInserters.inserter(source.getAbsolutePath(), config());
         logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
 
-        copyNodes(sourceDb, targetDb, ignoreProperties, highestIds.first());
+        copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, highestIds.first());
         copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, highestIds.other());
 
         targetDb.shutdown();
@@ -133,12 +134,12 @@ public class StoreCopy {
         }
     }
 
-    private static void copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, long highestNodeId) {
+    private static void copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, long highestNodeId) {
         long time = System.currentTimeMillis();
         int node = -1;
         while (++node <= highestNodeId) {
             if (!sourceDb.nodeExists(node)) continue;
-            targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node));
+            targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node,ignoreLabels));
             if (node % 1000 == 0) System.out.print(".");
             if (node % 100000 == 0) {
                 logs.flush();
@@ -148,9 +149,17 @@ public class StoreCopy {
         System.out.println("\n copying of " + node + " nodes took " + (System.currentTimeMillis() - time) + " ms.");
     }
 
-    private static Label[] labelsArray(BatchInserter db, long node) {
+    private static Label[] labelsArray(BatchInserter db, long node, Set<String> ignoreLabels) {
         Collection<Label> labels = IteratorUtil.asCollection(db.getNodeLabels(node));
         if (labels.isEmpty()) return NO_LABELS;
+        if (!ignoreLabels.isEmpty()) {
+            for (Iterator<Label> it = labels.iterator(); it.hasNext(); ) {
+                Label label = it.next();
+                if (ignoreLabels.contains(label.name().toLowerCase())) {
+                    it.remove();
+                }
+            }
+        }
         return labels.toArray(new Label[labels.size()]);
     }
 
