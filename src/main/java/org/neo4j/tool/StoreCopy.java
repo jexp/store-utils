@@ -2,6 +2,8 @@ package org.neo4j.tool;
 
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
+import org.neo4j.helpers.ArrayUtil;
+import org.neo4j.helpers.collection.IteratorUtil;
 import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.kernel.EmbeddedGraphDatabase;
 import org.neo4j.kernel.impl.nioneo.store.InvalidRecordException;
@@ -21,7 +23,7 @@ import static java.util.Collections.emptySet;
 
 public class StoreCopy {
 
-    public static final long REF_NODE_ID = 0L;
+    private static final Label[] NO_LABELS = new Label[0];
     private static PrintWriter logs;
 
     @SuppressWarnings("unchecked")
@@ -58,7 +60,10 @@ public class StoreCopy {
     private static void copyStore(String sourceDir, String targetDir, Set<String> ignoreRelTypes, Set<String> ignoreProperties) throws Exception {
         final File target = new File(targetDir);
         final File source = new File(sourceDir);
-        if (target.exists()) throw new IllegalArgumentException("Target Directory already exists "+target);
+        if (target.exists()) {
+            FileUtils.deleteRecursively(target);
+            // throw new IllegalArgumentException("Target Directory already exists "+target);
+        }
         if (!source.exists()) throw new IllegalArgumentException("Source Database does not exist "+source);
 
         BatchInserter targetDb = BatchInserters.inserter(target.getAbsolutePath(), config());
@@ -88,30 +93,33 @@ public class StoreCopy {
     private static void copyRelationships(GraphDatabaseService sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties) {
         long time = System.currentTimeMillis();
         int count=0;
-        Iterator<Node> allNodes = sourceDb.getAllNodes().iterator();
-        while (allNodes.hasNext()) {
-            Node node;
-            try {
-                node = allNodes.next();
-            } catch(Exception e) {
-                e.printStackTrace();
-                continue;
-            }
-            Iterator<Relationship> outgoingRelationships = getOutgoingRelationships(node).iterator();
-            while (outgoingRelationships.hasNext()) {
-                Relationship rel;
+        try (Transaction tx = sourceDb.beginTx()) {
+            Iterator<Node> allNodes = sourceDb.getAllNodes().iterator();
+            while (allNodes.hasNext()) {
+                Node node;
                 try {
-                    rel = outgoingRelationships.next();
+                    node = allNodes.next();
                 } catch(Exception e) {
                     e.printStackTrace();
                     continue;
                 }
-                if (ignoreRelTypes.contains(rel.getType().name().toLowerCase())) continue;
-                createRelationship(targetDb, rel, ignoreProperties);
-                count ++;
-                if (count % 1000 == 0) System.out.print(".");
-                if (count % 100000 == 0) System.out.println(" " + count);
+                Iterator<Relationship> outgoingRelationships = getOutgoingRelationships(node).iterator();
+                while (outgoingRelationships.hasNext()) {
+                    Relationship rel;
+                    try {
+                        rel = outgoingRelationships.next();
+                    } catch(Exception e) {
+                        e.printStackTrace();
+                        continue;
+                    }
+                    if (ignoreRelTypes.contains(rel.getType().name().toLowerCase())) continue;
+                    createRelationship(targetDb, rel, ignoreProperties);
+                    count ++;
+                    if (count % 1000 == 0) System.out.print(".");
+                    if (count % 100000 == 0) System.out.println(" " + count);
+                }
             }
+            tx.success();
         }
         System.out.println("\n copying of " + count+ " relationships took "+(System.currentTimeMillis()-time)+" ms.");
     }
@@ -137,31 +145,35 @@ public class StoreCopy {
     }
 
     private static void copyNodes(GraphDatabaseService sourceDb, BatchInserter targetDb, Set<String> ignoreProperties) {
-        final Node refNode = sourceDb.getNodeById(REF_NODE_ID);
         long time = System.currentTimeMillis();
         int count=0;
-        Iterator<Node> allNodes = sourceDb.getAllNodes().iterator();
-        while (allNodes.hasNext()) {
-            Node node;
-            try {
-                node = allNodes.next();
-            } catch(Exception e) {
-                e.printStackTrace();
-                continue;
+        try (Transaction tx = sourceDb.beginTx()) {
+            Iterator<Node> allNodes = sourceDb.getAllNodes().iterator();
+            while (allNodes.hasNext()) {
+                Node node;
+                try {
+                    node = allNodes.next();
+                } catch(Exception e) {
+                    e.printStackTrace();
+                    continue;
+                }
+                targetDb.createNode(node.getId(), getProperties(node, ignoreProperties), labelsArray(node));
+                count++;
+                if (count % 1000 == 0) System.out.print(".");
+                if (count % 100000 == 0) {
+                    logs.flush();
+                    System.out.println(" " + count);
+                }
             }
-            if (node.equals(refNode)) {
-                targetDb.setNodeProperties(REF_NODE_ID,getProperties(node,ignoreProperties));
-            } else {
-                targetDb.createNode(node.getId(), getProperties(node, ignoreProperties));
-            }
-            count++;
-            if (count % 1000 == 0) System.out.print(".");
-            if (count % 100000 == 0) {
-                logs.flush();
-                System.out.println(" " + count);
-            }
+            tx.success();
         }
         System.out.println("\n copying of " + count+ " nodes took "+(System.currentTimeMillis()-time)+" ms.");
+    }
+
+    private static Label[] labelsArray(Node node) {
+        Collection<Label> labels = IteratorUtil.asCollection(node.getLabels());
+        if (labels.isEmpty()) return NO_LABELS;
+        return labels.toArray(new Label[labels.size()]);
     }
 
     private static Map<String, Object> getProperties(PropertyContainer pc, Set<String> ignoreProperties) {

@@ -1,6 +1,7 @@
 package org.neo4j.tool;
 
 import org.neo4j.graphdb.*;
+import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.collection.IteratorUtil;
 import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.kernel.EmbeddedGraphDatabase;
@@ -54,8 +55,8 @@ public class StoreComparer {
         if (!target.exists()) throw new IllegalArgumentException("Target Directory does not exists " + target);
         if (!source.exists()) throw new IllegalArgumentException("Source Database does not exist " + source);
 
-        EmbeddedGraphDatabase targetDb = new EmbeddedGraphDatabase(target.getAbsolutePath(), config());
-        GraphDatabaseService sourceDb = new EmbeddedGraphDatabase(sourceDir, config());
+        GraphDatabaseService targetDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(target.getAbsolutePath()).setConfig(config()).newGraphDatabase();
+        GraphDatabaseService sourceDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(sourceDir).setConfig(config()).newGraphDatabase();
 
         compareCounts(sourceDb, targetDb, ignoreRelTypes, ignoreProperties);
         compareNodes(sourceDb, targetDb, ignoreProperties);
@@ -114,7 +115,7 @@ public class StoreComparer {
     }
 
 
-    private static void compareRelationships(GraphDatabaseService sourceDb, EmbeddedGraphDatabase targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties) {
+    private static void compareRelationships(GraphDatabaseService sourceDb, GraphDatabaseService targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties) {
         long time = System.currentTimeMillis();
         int count = 0;
         for (Node node : sourceDb.getAllNodes()) {
@@ -180,16 +181,11 @@ public class StoreComparer {
         return value1.equals(value2);
     }
 
-    private static void compareNodes(GraphDatabaseService sourceDb, EmbeddedGraphDatabase targetDb, Set<String> ignoreProperties) {
-        final Node refNode = sourceDb.getReferenceNode();
+    private static void compareNodes(GraphDatabaseService sourceDb, GraphDatabaseService targetDb, Set<String> ignoreProperties) {
         long time = System.currentTimeMillis();
         int count = 0;
         for (Node node : sourceDb.getAllNodes()) {
-            if (node.equals(refNode)) {
-                compareProperties(refNode, targetDb.getReferenceNode(), ignoreProperties);
-            } else {
-                compareProperties(node, targetDb.getNodeById(node.getId()), ignoreProperties);
-            }
+            compareProperties(node, targetDb.getNodeById(node.getId()), ignoreProperties);
             count++;
             if (count % 1000 == 0) System.out.print(".");
             if (count % 100000 == 0) System.out.println(" " + count);
