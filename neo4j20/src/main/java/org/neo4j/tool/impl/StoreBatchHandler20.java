@@ -1,18 +1,21 @@
-package org.neo4j.tool;
+package org.neo4j.tool.impl;
 
-import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.collection.MapUtil;
+import org.neo4j.tool.api.StoreHandler;
+import org.neo4j.unsafe.batchinsert.BatchInserter;
+import org.neo4j.unsafe.batchinsert.BatchInserters;
 
 import java.util.Map;
 
 /**
  * @author mh
- * @since 21.12.11
+ * @since 09.06.14
  */
-public class StoreUpdate {
+public class StoreBatchHandler20 implements StoreHandler {
+
+
+
     public static Map<String, String> config() {
-        //noinspection unchecked
         return (Map) MapUtil.map(
                 "neostore.nodestore.db.mapped_memory", "100M",
                 "neostore.relationshipstore.db.mapped_memory", "500M",
@@ -21,17 +24,21 @@ public class StoreUpdate {
                 "neostore.propertystore.db.arrays.mapped_memory", "300M",
                 "neostore.propertystore.db.index.keys.mapped_memory", "100M",
                 "neostore.propertystore.db.index.mapped_memory", "100M",
-                "allow_store_upgrade", "true",
-                "cache_type", "weak"
+                "cache_type", "none"
         );
     }
 
-    public static void main(String[] args) {
-        GraphDatabaseService db = null;
-        try {
-            db = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder("target/data").setConfig(config()).newGraphDatabase();
-        } finally {
-            if (db != null) db.shutdown();
-        }
+    protected BatchInserter batchInserter;
+    protected String dir;
+
+    @Override
+    public void init(String dir, Map<String, String> config) {
+        this.dir = dir;
+        batchInserter = BatchInserters.inserter(dir, config == null ? config() : config);
+    }
+
+    @Override
+    public void shutdown() {
+        batchInserter.shutdown();
     }
 }
