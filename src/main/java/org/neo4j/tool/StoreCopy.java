@@ -37,7 +37,8 @@ public class StoreCopy {
                 "neostore.propertystore.db.arrays.mapped_memory", "300M",
                 "neostore.propertystore.db.index.keys.mapped_memory", "100M",
                 "neostore.propertystore.db.index.mapped_memory", "100M",
-                "cache_type", "weak"
+                "use_memory_mapped_buffers","true",
+                "cache_type", "none"
         );
     }
 
@@ -74,8 +75,9 @@ public class StoreCopy {
         BatchInserter sourceDb = BatchInserters.inserter(source.getAbsolutePath(), config());
         logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
 
+        long firstNode = firstNode(sourceDb, highestIds.first());
         copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, highestIds.first());
-        copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, highestIds.other());
+        copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, highestIds.other(), firstNode);
 
         targetDb.shutdown();
         sourceDb.shutdown();
@@ -103,7 +105,7 @@ public class StoreCopy {
         }
     }
 
-    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, long highestRelId) {
+    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, long highestRelId, long firstNode) {
         long time = System.currentTimeMillis();
         long relId = 0;
         long notFound = 0;
@@ -117,10 +119,23 @@ public class StoreCopy {
             }
             if (ignoreRelTypes.contains(rel.getType().name().toLowerCase())) continue;
             createRelationship(targetDb, sourceDb, rel, ignoreProperties);
-            if (relId % 1000 == 0) System.out.print(".");
-            if (relId % 100000 == 0) System.out.println(" " + rel);
+            if (relId % 1000 == 0) {
+				System.out.print(".");
+			}
+            if (relId % 100000 == 0) {
+                flushCache(sourceDb, firstNode);
+                System.out.println(" " + rel.getId());
+            }
         }
         System.out.println("\n copying of "+relId+" relationships took "+(System.currentTimeMillis()-time)+" ms. Not found "+notFound);
+    }
+
+    private static long firstNode(BatchInserter sourceDb, long highestNodeId) {
+        int node = -1;
+        while (++node <= highestNodeId) {
+            if (sourceDb.nodeExists(node)) return node;
+        }
+        return -1;
     }
 
     private static void createRelationship(BatchInserter targetDb, BatchInserter sourceDb, BatchRelationship rel, Set<String> ignoreProperties) {
@@ -142,11 +157,22 @@ public class StoreCopy {
             targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node,ignoreLabels));
             if (node % 1000 == 0) System.out.print(".");
             if (node % 100000 == 0) {
+                flushCache(sourceDb, node);
                 logs.flush();
                 System.out.println(" " + node);
             }
         }
         System.out.println("\n copying of " + node + " nodes took " + (System.currentTimeMillis() - time) + " ms.");
+    }
+
+    private static void flushCache(BatchInserter sourceDb, long node) {
+        Map<String, Object> nodeProperties = sourceDb.getNodeProperties(node);
+        Iterator<Map.Entry<String, Object>> iterator = nodeProperties.entrySet().iterator();
+        if (iterator.hasNext()) {
+            Map.Entry<String, Object> firstProp = iterator.next();
+            sourceDb.setNodeProperty(node, firstProp.getKey(), firstProp.getValue()); // force flush
+            System.out.print("F");
+        }
     }
 
     private static Label[] labelsArray(BatchInserter db, long node, Set<String> ignoreLabels) {
