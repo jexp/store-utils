@@ -31,10 +31,10 @@ public class StoreCopy {
     public static Map<String, String> config() {
         return (Map) MapUtil.map(
                 "neostore.nodestore.db.mapped_memory", "100M",
-                "neostore.relationshipstore.db.mapped_memory", "100M",
-                "neostore.propertystore.db.mapped_memory", "100M",
-                "neostore.propertystore.db.strings.mapped_memory", "100m",
-                "neostore.propertystore.db.arrays.mapped_memory", "100M",
+                "neostore.relationshipstore.db.mapped_memory", "500M",
+                "neostore.propertystore.db.mapped_memory", "300M",
+                "neostore.propertystore.db.strings.mapped_memory", "1G",
+                "neostore.propertystore.db.arrays.mapped_memory", "300M",
                 "neostore.propertystore.db.index.keys.mapped_memory", "100M",
                 "neostore.propertystore.db.index.mapped_memory", "100M",
                 "use_memory_mapped_buffers","true",
