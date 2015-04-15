@@ -149,10 +149,17 @@ public class StoreCopy {
 
     private static void copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, long highestNodeId) {
         long time = System.currentTimeMillis();
-        int node = -1;
+        int node = 0;
+        if (!sourceDb.nodeExists(node)) {
+            targetDb.setNodeProperties(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties));
+        }
         while (++node <= highestNodeId) {
             if (!sourceDb.nodeExists(node)) continue;
-            targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties));
+            try {
+                targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties));
+            } catch (Exception e) {
+                logs.append(e.getMessage());
+            }
             if (node % 1000 == 0) System.out.print(".");
             if (node % 100000 == 0) {
                 flushCache(sourceDb, node);
