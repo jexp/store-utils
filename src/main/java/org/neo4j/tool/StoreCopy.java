@@ -172,6 +172,8 @@ public class StoreCopy {
                 result.put(property,pc.getProperty(property));
             } catch(InvalidRecordException ire) {
                 addLog(pc, property, ire.getMessage());
+            } catch (Exception e) {
+                addLog(pc, property, e.getMessage());
             }
         }
         return result;
