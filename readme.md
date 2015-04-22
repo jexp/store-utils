@@ -17,5 +17,6 @@ Usage:
       -Dexec.args="source:version target:version [rel,types,to,ignore] [properties,to,ignore]"
 
 e.g. 
+
     mvn compile exec:java -Dexec.mainClass="org.neo4j.tool.StoreCopyRevert" \
       -Dexec.args="test.db:1.9.8 fixed.db:2.0.0 :FOO bar"
