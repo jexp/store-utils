@@ -1,22 +1,21 @@
-## Tools to copy and compare Neo4j Stores
+## Tools to copy Neo4j Stores between versions
 
-Uses the GraphDatabaseService to read a store and the batch-inserter API to write the target store keeping the node-ids.
+Uses the batch-inserter API to read and write the stores keeping the node-ids.
 Copies the index-files as is.
 Ignores broken nodes and relationships.
 
 Also useful to skip no longer wanted properties or relationships with a certain type. Good for store compaction as it
 rewrites the store file reclaiming space that is sitting empty.
 
-Change the Neo4j version in pom.xml before running. (Currently 1.9.5)
+It uses local .m2 repositories of the Neo4j versions that you provide.
 
 ### Store Copy
 
 Usage:
 
-    mvn compile exec:java -Dexec.mainClass="org.neo4j.tool.StoreCopy" \
-      -Dexec.args="source-dir target-dir [rel,types,to,ignore] [properties,to,ignore] [labels,to,ignore]"
+    mvn compile exec:java -Dexec.mainClass="org.neo4j.tool.StoreCopyRevert" \
+      -Dexec.args="source:version target:version [rel,types,to,ignore] [properties,to,ignore]"
 
-# Store Compare
-
-    mvn compile exec:java -Dexec.mainClass="org.neo4j.tool.StoreComparer" \
-      -Dexec.args="source-dir target-dir [rel,types,to,ignore] [properties,to,ignore]"
+e.g. 
+    mvn compile exec:java -Dexec.mainClass="org.neo4j.tool.StoreCopyRevert" \
+      -Dexec.args="test.db:1.9.8 fixed.db:2.0.0 :FOO bar"
