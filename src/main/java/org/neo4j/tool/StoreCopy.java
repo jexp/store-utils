@@ -5,10 +5,10 @@ import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.Pair;
 import org.neo4j.helpers.collection.IteratorUtil;
 import org.neo4j.helpers.collection.MapUtil;
+import org.neo4j.io.fs.FileUtils;
 import org.neo4j.kernel.GraphDatabaseAPI;
-import org.neo4j.kernel.impl.core.NodeManager;
-import org.neo4j.kernel.impl.nioneo.store.InvalidRecordException;
-import org.neo4j.kernel.impl.util.FileUtils;
+import org.neo4j.kernel.IdGeneratorFactory;
+import org.neo4j.kernel.IdType;
 import org.neo4j.unsafe.batchinsert.BatchInserter;
 import org.neo4j.unsafe.batchinsert.BatchInserters;
 import org.neo4j.unsafe.batchinsert.BatchRelationship;
@@ -88,9 +88,9 @@ public class StoreCopy {
 
     private static Pair<Long, Long> getHighestNodeId(File source) {
         GraphDatabaseAPI api = (GraphDatabaseAPI) new GraphDatabaseFactory().newEmbeddedDatabase(source.getAbsolutePath());
-        NodeManager nodeManager = api.getDependencyResolver().resolveDependency(NodeManager.class);
-        long highestNodeId = nodeManager.getHighestPossibleIdInUse(Node.class);
-        long highestRelId = nodeManager.getHighestPossibleIdInUse(Relationship.class);
+        IdGeneratorFactory idGenerators = api.getDependencyResolver().resolveDependency(IdGeneratorFactory.class);
+        long highestNodeId = idGenerators.get(IdType.NODE).getHighestPossibleIdInUse();
+        long highestRelId = idGenerators.get(IdType.RELATIONSHIP).getHighestPossibleIdInUse();
         api.shutdown();
         return Pair.of(highestNodeId, highestRelId);
     }
@@ -114,18 +114,17 @@ public class StoreCopy {
             BatchRelationship rel = null;
             try {
                 rel = sourceDb.getRelationshipById(relId++);
-            } catch (InvalidRecordException nfe) {
+                if (ignoreRelTypes.contains(rel.getType().name().toLowerCase())) continue;
+                createRelationship(targetDb, sourceDb, rel, ignoreProperties);
+                if (relId % 1000 == 0) {
+                    System.out.print(".");
+                }
+                if (relId % 100000 == 0) {
+                    flushCache(sourceDb, firstNode);
+                    System.out.println(" " + rel.getId());
+                }
+            } catch (Exception nfe) {
                 notFound++;
-                continue;
-            }
-            if (ignoreRelTypes.contains(rel.getType().name().toLowerCase())) continue;
-            createRelationship(targetDb, sourceDb, rel, ignoreProperties);
-            if (relId % 1000 == 0) {
-				System.out.print(".");
-			}
-            if (relId % 100000 == 0) {
-                flushCache(sourceDb, firstNode);
-                System.out.println(" " + rel.getId());
             }
         }
         System.out.println("\n copying of "+relId+" relationships took "+(System.currentTimeMillis()-time)+" ms. Not found "+notFound);
@@ -145,7 +144,7 @@ public class StoreCopy {
         final RelationshipType type = rel.getType();
         try {
             targetDb.createRelationship(startNodeId, endNodeId, type, getProperties(sourceDb.getRelationshipProperties(rel.getId()), ignoreProperties));
-        } catch (InvalidRecordException ire) {
+        } catch (Exception ire) {
             addLog(rel, "create Relationship: " + startNodeId + "-[:" + type + "]" + "->" + endNodeId, ire.getMessage());
         }
     }
