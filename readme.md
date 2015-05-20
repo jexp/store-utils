@@ -20,3 +20,10 @@ e.g.
 
     mvn compile exec:java -Dexec.mainClass="org.neo4j.tool.StoreCopyRevert" \
       -Dexec.args="test.db:1.9.8 fixed.db:2.0.0 :FOO bar"
+
+Supported versions
+
+* 1.9.8
+* 2.0.0
+* 2.2.1
+* 2.2.0-M03
