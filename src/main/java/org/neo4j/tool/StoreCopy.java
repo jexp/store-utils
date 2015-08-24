@@ -113,16 +113,16 @@ public class StoreCopy {
         while (relId <= highestRelId) {
             BatchRelationship rel = null;
             try {
+                if (relId % 10000 == 0) {
+                    System.out.print(".");
+                }
+                if (relId % 500000 == 0) {
+                    flushCache(sourceDb, firstNode);
+                    System.out.println(" " + relId + " / " + highestRelId + " (" + 100 *((float)relId / highestRelId) + "%)");
+                }
                 rel = sourceDb.getRelationshipById(relId++);
                 if (ignoreRelTypes.contains(rel.getType().name().toLowerCase())) continue;
                 createRelationship(targetDb, sourceDb, rel, ignoreProperties);
-                if (relId % 1000 == 0) {
-                    System.out.print(".");
-                }
-                if (relId % 100000 == 0) {
-                    flushCache(sourceDb, firstNode);
-                    System.out.println(" " + rel.getId());
-                }
             } catch (Exception nfe) {
                 notFound++;
             }
@@ -153,14 +153,16 @@ public class StoreCopy {
         long time = System.currentTimeMillis();
         int node = -1;
         while (++node <= highestNodeId) {
-            if (!sourceDb.nodeExists(node)) continue;
-            targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node,ignoreLabels));
-            if (node % 1000 == 0) System.out.print(".");
-            if (node % 100000 == 0) {
+            if (node % 10000 == 0) {
+                System.out.print(".");
+            }
+            if (node % 500000 == 0) {
                 flushCache(sourceDb, node);
                 logs.flush();
-                System.out.println(" " + node);
+                System.out.println(" " + node + " / " + highestNodeId + " (" + 100 *((float)node / highestNodeId) + "%)");
             }
+            if (!sourceDb.nodeExists(node)) continue;
+            targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node,ignoreLabels));
         }
         System.out.println("\n copying of " + node + " nodes took " + (System.currentTimeMillis() - time) + " ms.");
     }
