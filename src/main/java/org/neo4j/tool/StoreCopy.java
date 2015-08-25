@@ -152,19 +152,26 @@ public class StoreCopy {
     private static void copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, long highestNodeId) {
         long time = System.currentTimeMillis();
         int node = -1;
+        long notFound = 0;
         while (++node <= highestNodeId) {
-            if (node % 10000 == 0) {
-                System.out.print(".");
+            try {
+              if (node % 10000 == 0) {
+                  System.out.print(".");
+              }
+              if (node % 500000 == 0) {
+                  flushCache(sourceDb, node);
+                  logs.flush();
+                  System.out.println(" " + node + " / " + highestNodeId + " (" + 100 *((float)node / highestNodeId) + "%)");
+              }
+
+              if (!sourceDb.nodeExists(node)) continue;
+              targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node,ignoreLabels));
             }
-            if (node % 500000 == 0) {
-                flushCache(sourceDb, node);
-                logs.flush();
-                System.out.println(" " + node + " / " + highestNodeId + " (" + 100 *((float)node / highestNodeId) + "%)");
+            catch (Exception exp) {
+              notFound += 1;
             }
-            if (!sourceDb.nodeExists(node)) continue;
-            targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node,ignoreLabels));
         }
-        System.out.println("\n copying of " + node + " nodes took " + (System.currentTimeMillis() - time) + " ms.");
+        System.out.println("\n copying of " + node + " nodes took " + (System.currentTimeMillis() - time) + " ms. Not found " + notFound);
     }
 
     private static void flushCache(BatchInserter sourceDb, long node) {
