@@ -7,7 +7,7 @@ Ignores broken nodes and relationships.
 Also useful to skip no longer wanted properties or relationships with a certain type. Good for store compaction as it
 rewrites the store file reclaiming space that is sitting empty.
 
-Change the Neo4j version in pom.xml before running. (Currently 2.2.1)
+Change the Neo4j version in pom.xml before running. (Currently 2.2.4)
 
 ### Store Copy
 
