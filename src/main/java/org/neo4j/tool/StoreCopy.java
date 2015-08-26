@@ -77,8 +77,9 @@ public class StoreCopy {
         logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
 
         long firstNode = firstNode(sourceDb, highestIds.first());
-        copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, highestIds.first());
-        copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, highestIds.other(), firstNode);
+
+        Set<Long> relationshipIds = copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, highestIds.first());
+        copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, relationshipIds, firstNode);
 
         targetDb.shutdown();
         sourceDb.shutdown();
@@ -106,28 +107,31 @@ public class StoreCopy {
         }
     }
 
-    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, long highestRelId, long firstNode) {
+    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, Set<Long> relationshipIds, long firstNode) {
         long time = System.currentTimeMillis();
-        long relId = 0;
         long notFound = 0;
-        while (relId <= highestRelId) {
+        long count = 0;
+        long total = relationshipIds.size();
+        for (long relId : relationshipIds) {
             BatchRelationship rel = null;
             try {
-                if (relId % 10000 == 0) {
+                if (count % 10000 == 0) {
                     System.out.print(".");
                 }
-                if (relId % 500000 == 0) {
+                if (count % 500000 == 0) {
                     flushCache(sourceDb, firstNode);
-                    System.out.println(" " + relId + " / " + highestRelId + " (" + 100 *((float)relId / highestRelId) + "%)");
+                    System.out.println(" " + count + " / " + total + " (" + 100 *((float)count / total) + "%)");
                 }
-                rel = sourceDb.getRelationshipById(relId++);
+                rel = sourceDb.getRelationshipById(relId);
                 if (ignoreRelTypes.contains(rel.getType().name().toLowerCase())) continue;
                 createRelationship(targetDb, sourceDb, rel, ignoreProperties);
+                count++;
             } catch (Exception nfe) {
                 notFound++;
             }
         }
-        System.out.println("\n copying of "+relId+" relationships took "+(System.currentTimeMillis()-time)+" ms. Not found "+notFound);
+        System.out.println("\n copying of "+count+" relationships took "+(System.currentTimeMillis()-time)+" ms. Not found "+notFound);
+
     }
 
     private static long firstNode(BatchInserter sourceDb, long highestNodeId) {
@@ -149,10 +153,11 @@ public class StoreCopy {
         }
     }
 
-    private static void copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, long highestNodeId) {
+    private static Set<Long> copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, long highestNodeId) {
         long time = System.currentTimeMillis();
         int node = -1;
         long notFound = 0;
+        Set<Long> relationshipIds = new HashSet<Long>();
         while (++node <= highestNodeId) {
             try {
               if (node % 10000 == 0) {
@@ -165,6 +170,11 @@ public class StoreCopy {
               }
 
               if (!sourceDb.nodeExists(node)) continue;
+
+              // Add the relationship ids from this node to the set of all known relationship ids.
+              for (long relId : sourceDb.getRelationshipIds(node)) {
+                  relationshipIds.add(relId);
+              }
               targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node,ignoreLabels));
             }
             catch (Exception exp) {
@@ -172,6 +182,7 @@ public class StoreCopy {
             }
         }
         System.out.println("\n copying of " + node + " nodes took " + (System.currentTimeMillis() - time) + " ms. Not found " + notFound);
+        return relationshipIds;
     }
 
     private static void flushCache(BatchInserter sourceDb, long node) {
