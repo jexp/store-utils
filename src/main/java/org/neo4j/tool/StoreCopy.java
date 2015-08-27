@@ -1,5 +1,9 @@
 package org.neo4j.tool;
 
+import org.neo4j.collection.primitive.Primitive;
+import org.neo4j.collection.primitive.PrimitiveLongCollection;
+import org.neo4j.collection.primitive.PrimitiveLongIterator;
+import org.neo4j.collection.primitive.PrimitiveLongSet;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.Pair;
@@ -9,9 +13,12 @@ import org.neo4j.io.fs.FileUtils;
 import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.kernel.IdGeneratorFactory;
 import org.neo4j.kernel.IdType;
+import org.neo4j.kernel.impl.store.InvalidRecordException;
 import org.neo4j.unsafe.batchinsert.BatchInserter;
 import org.neo4j.unsafe.batchinsert.BatchInserters;
 import org.neo4j.unsafe.batchinsert.BatchRelationship;
+
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -45,16 +52,29 @@ public class StoreCopy {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
-            System.err.println("Usage: StoryCopy source target [rel,types,to,ignore] [properties,to,ignore]");
+            System.err.println("Usage: StoryCopy [--scan-rel-store] source target [rel,types,to,ignore] [properties,to,ignore] [labels,to,ignore]");
+            System.err.println("  --scan-rel-store indicates that relationships should be copied by scanning every possible relationship ID in");
+            System.err.println("      the relationship store instead of just copying the relationships referenced by nodes.  In a consistent ");
+            System.err.println("      database both methods are equivalent.  --scan-rel-store is much slower for relationship stores that need a");
+            System.err.println("      lot of compaction, but it uses less memory.");
             return;
         }
-        String sourceDir = args[0];
-        String targetDir = args[1];
-        Set<String> ignoreRelTypes = splitOptionIfExists(args, 2);
-        Set<String> ignoreProperties = splitOptionIfExists(args, 3);
-        Set<String> ignoreLabels = splitOptionIfExists(args, 4);
+
+        int argBase = 0;
+        boolean useScanStore = false;
+
+        if (args[0].equals("--scan-rel-store")) {
+            argBase++;
+            useScanStore = true;
+        }
+
+        String sourceDir = args[argBase++];
+        String targetDir = args[argBase++];
+        Set<String> ignoreRelTypes = splitOptionIfExists(args, argBase++);
+        Set<String> ignoreProperties = splitOptionIfExists(args, argBase++);
+        Set<String> ignoreLabels = splitOptionIfExists(args, argBase++);
         System.out.printf("Copying from %s to %s ingoring rel-types %s ignoring properties %s ignoring labels %s %n", sourceDir, targetDir, ignoreRelTypes, ignoreProperties,ignoreLabels);
-        copyStore(sourceDir, targetDir, ignoreRelTypes, ignoreProperties,ignoreLabels);
+        copyStore(sourceDir, targetDir, useScanStore, ignoreRelTypes, ignoreProperties,ignoreLabels);
     }
 
     private static Set<String> splitOptionIfExists(String[] args, final int index) {
@@ -62,7 +82,7 @@ public class StoreCopy {
         return new HashSet<String>(asList(args[index].toLowerCase().split(",")));
     }
 
-    private static void copyStore(String sourceDir, String targetDir, Set<String> ignoreRelTypes, Set<String> ignoreProperties, Set<String> ignoreLabels) throws Exception {
+    private static void copyStore(String sourceDir, String targetDir, boolean useScanStore, Set<String> ignoreRelTypes, Set<String> ignoreProperties, Set<String> ignoreLabels) throws Exception {
         final File target = new File(targetDir);
         final File source = new File(sourceDir);
         if (target.exists()) {
@@ -78,8 +98,8 @@ public class StoreCopy {
 
         long firstNode = firstNode(sourceDb, highestIds.first());
 
-        Set<Long> relationshipIds = copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, highestIds.first());
-        copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, relationshipIds, firstNode);
+        PrimitiveLongCollection relationshipIds = copyNodes(sourceDb, targetDb, useScanStore, ignoreProperties, ignoreLabels, highestIds.first());
+        copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, relationshipIds, firstNode, highestIds.other());
 
         targetDb.shutdown();
         sourceDb.shutdown();
@@ -107,12 +127,14 @@ public class StoreCopy {
         }
     }
 
-    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, Set<Long> relationshipIds, long firstNode) {
+    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, PrimitiveLongCollection relationshipIds, long firstNode, long highestRelId) {
         long time = System.currentTimeMillis();
         long notFound = 0;
         long count = 0;
-        long total = relationshipIds.size();
-        for (long relId : relationshipIds) {
+        long total = relationshipIds != null ? relationshipIds.size() : highestRelId;
+        Iterator<Long> iterator = getRelationshipIdIterator(relationshipIds, highestRelId);
+        while (iterator.hasNext()) {
+            long relId = iterator.next();
             BatchRelationship rel = null;
             try {
                 if (count % 10000 == 0) {
@@ -126,11 +148,11 @@ public class StoreCopy {
                 if (ignoreRelTypes.contains(rel.getType().name().toLowerCase())) continue;
                 createRelationship(targetDb, sourceDb, rel, ignoreProperties);
                 count++;
-            } catch (Exception nfe) {
+            } catch (InvalidRecordException nfe) {
                 notFound++;
             }
         }
-        System.out.println("\n copying of "+count+" relationships took "+(System.currentTimeMillis()-time)+" ms. Not found "+notFound);
+        System.out.println("\n copying of " + count + " relationships took "+(System.currentTimeMillis()-time)+" ms. Not found "+notFound);
 
     }
 
@@ -153,11 +175,11 @@ public class StoreCopy {
         }
     }
 
-    private static Set<Long> copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, long highestNodeId) {
+    private static PrimitiveLongCollection copyNodes(BatchInserter sourceDb, BatchInserter targetDb, boolean dontStoreRelIds, Set<String> ignoreProperties, Set<String> ignoreLabels, long highestNodeId) {
         long time = System.currentTimeMillis();
         int node = -1;
         long notFound = 0;
-        Set<Long> relationshipIds = new HashSet<Long>();
+        PrimitiveLongSet relationshipIds = dontStoreRelIds ? null : Primitive.offHeapLongSet();
         while (++node <= highestNodeId) {
             try {
               if (node % 10000 == 0) {
@@ -172,12 +194,14 @@ public class StoreCopy {
               if (!sourceDb.nodeExists(node)) continue;
 
               // Add the relationship ids from this node to the set of all known relationship ids.
-              for (long relId : sourceDb.getRelationshipIds(node)) {
-                  relationshipIds.add(relId);
+              if (!dontStoreRelIds) {
+                  for (long relId : sourceDb.getRelationshipIds(node)) {
+                      relationshipIds.add(relId);
+                  }
               }
               targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node,ignoreLabels));
             }
-            catch (Exception exp) {
+            catch (InvalidRecordException exp) {
               notFound += 1;
             }
         }
@@ -221,5 +245,35 @@ public class StoreCopy {
 
     private static void addLog(PropertyContainer pc, String property, String message) {
         logs.append(String.format("%s.%s %s%n", pc, property, message));
+    }
+
+    private static Iterator<Long> getRelationshipIdIterator(PrimitiveLongCollection relationshipIds, final long highestRelId) {
+        if (relationshipIds == null) {
+            return new Iterator<Long>() {
+                private Long _value = 0L;
+                public boolean hasNext() {
+                    return _value <= highestRelId;
+                }
+                public Long next() {
+                    return _value++;
+                }
+                public void remove() {
+                    throw new NotImplementedException();
+                }
+            };
+        } else {
+            final PrimitiveLongIterator pli = relationshipIds.iterator();
+            return new Iterator<Long>() {
+                public boolean hasNext() {
+                    return pli.hasNext();
+                }
+                public Long next() {
+                    return pli.next();
+                }
+                public void remove() {
+                    throw new NotImplementedException();
+                }
+            };
+        }
     }
 }
