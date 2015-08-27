@@ -18,8 +18,6 @@ import org.neo4j.unsafe.batchinsert.BatchInserter;
 import org.neo4j.unsafe.batchinsert.BatchInserters;
 import org.neo4j.unsafe.batchinsert.BatchRelationship;
 
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
-
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -258,7 +256,7 @@ public class StoreCopy {
                     return _value++;
                 }
                 public void remove() {
-                    throw new NotImplementedException();
+                    throw new UnsupportedOperationException();
                 }
             };
         } else {
@@ -271,7 +269,7 @@ public class StoreCopy {
                     return pli.next();
                 }
                 public void remove() {
-                    throw new NotImplementedException();
+                    throw new UnsupportedOperationException();
                 }
             };
         }
