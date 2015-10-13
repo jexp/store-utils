@@ -57,9 +57,12 @@ public class StoreComparer {
         GraphDatabaseService targetDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(target.getAbsolutePath()).setConfig(config()).newGraphDatabase();
         GraphDatabaseService sourceDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(sourceDir).setConfig(config()).newGraphDatabase();
 
-        compareCounts(sourceDb, targetDb, ignoreRelTypes, ignoreProperties);
-        compareNodes(sourceDb, targetDb, ignoreProperties);
-        compareRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties);
+        try (Transaction srcDbTx = sourceDb.beginTx();
+             Transaction targetDbTx = targetDb.beginTx()) {
+            compareCounts(sourceDb, targetDb, ignoreRelTypes, ignoreProperties);
+            compareNodes(sourceDb, targetDb, ignoreProperties);
+            compareRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties);
+        }
 
         targetDb.shutdown();
         sourceDb.shutdown();
