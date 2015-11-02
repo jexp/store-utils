@@ -112,6 +112,7 @@ public class StoreCopy {
         long notFound = 0;
         while (relId <= highestRelId) {
             BatchRelationship rel = null;
+            String type = null;
             try {
                 if (relId % 10000 == 0) {
                     System.out.print(".");
@@ -121,13 +122,18 @@ public class StoreCopy {
                     System.out.println(" " + relId + " / " + highestRelId + " (" + 100 *((float)relId / highestRelId) + "%)");
                 }
                 rel = sourceDb.getRelationshipById(relId++);
-                if (ignoreRelTypes.contains(rel.getType().name().toLowerCase())) continue;
+                type = rel.getType().name();
+                if (ignoreRelTypes.contains(type.toLowerCase())) continue;
                 createRelationship(targetDb, sourceDb, rel, ignoreProperties);
-            } catch (Exception nfe) {
-                notFound++;
+            } catch (Exception e) {
+                if (e instanceof org.neo4j.kernel.impl.store.InvalidRecordException && e.getMessage().endsWith("not in use")) {
+                   notFound++;
+                } else {
+                   addLog(rel, "copy Relationship: " + (relId - 1) + "-[:" + type + "]" + "->?", e.getMessage());
+                }
             }
         }
-        System.out.println("\n copying of "+relId+" relationships took "+(System.currentTimeMillis()-time)+" ms. Not found "+notFound);
+        System.out.println("\n copying of "+relId+" relationship records took "+(System.currentTimeMillis()-time)+" ms. Unused Records "+notFound);
     }
 
     private static long firstNode(BatchInserter sourceDb, long highestNodeId) {
@@ -143,9 +149,11 @@ public class StoreCopy {
         long endNodeId = rel.getEndNode();
         final RelationshipType type = rel.getType();
         try {
-            targetDb.createRelationship(startNodeId, endNodeId, type, getProperties(sourceDb.getRelationshipProperties(rel.getId()), ignoreProperties));
-        } catch (Exception ire) {
-            addLog(rel, "create Relationship: " + startNodeId + "-[:" + type + "]" + "->" + endNodeId, ire.getMessage());
+            Map<String, Object> props = getProperties(sourceDb.getRelationshipProperties(rel.getId()), ignoreProperties);
+//            if (props.isEmpty()) props = Collections.<String,Object>singletonMap("old_id",rel.getId()); else props.put("old_id",rel.getId());
+            targetDb.createRelationship(startNodeId, endNodeId, type, props);
+        } catch (Exception e) {
+            addLog(rel, "create Relationship: " + startNodeId + "-[:" + type + "]" + "->" + endNodeId, e.getMessage());
         }
     }
 
@@ -167,11 +175,13 @@ public class StoreCopy {
               if (!sourceDb.nodeExists(node)) continue;
               targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node,ignoreLabels));
             }
-            catch (Exception exp) {
-              notFound += 1;
+            catch (Exception e) {
+                if (e instanceof org.neo4j.kernel.impl.store.InvalidRecordException && e.getMessage().endsWith("not in use")) {
+                    notFound += 1;
+                } else addLog(node, e.getMessage());
             }
         }
-        System.out.println("\n copying of " + node + " nodes took " + (System.currentTimeMillis() - time) + " ms. Not found " + notFound);
+        System.out.println("\n copying of " + node + " node records took " + (System.currentTimeMillis() - time) + " ms. Unused Records " + notFound);
     }
 
     private static void flushCache(BatchInserter sourceDb, long node) {
@@ -206,6 +216,10 @@ public class StoreCopy {
 
     private static void addLog(BatchRelationship rel, String property, String message) {
         logs.append(String.format("%s.%s %s%n", rel, property, message));
+    }
+
+    private static void addLog(long node, String message) {
+        logs.append(String.format("Node: %s %s%n", node, message));
     }
 
     private static void addLog(PropertyContainer pc, String property, String message) {
