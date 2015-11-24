@@ -4,4 +4,6 @@ target
 *.iml
 *.ipr
 .idea
+*.db*
+.shell_history
 
