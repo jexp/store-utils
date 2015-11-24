@@ -10,13 +10,14 @@ import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.kernel.IdGeneratorFactory;
 import org.neo4j.kernel.IdType;
 import org.neo4j.unsafe.batchinsert.BatchInserter;
+import org.neo4j.unsafe.batchinsert.BatchInserterImpl;
 import org.neo4j.unsafe.batchinsert.BatchInserters;
 import org.neo4j.unsafe.batchinsert.BatchRelationship;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.*;
 
 import static java.util.Arrays.asList;
@@ -30,15 +31,7 @@ public class StoreCopy {
     @SuppressWarnings("unchecked")
     public static Map<String, String> config() {
         return (Map) MapUtil.map(
-                "neostore.nodestore.db.mapped_memory", "100M",
-                "neostore.relationshipstore.db.mapped_memory", "500M",
-                "neostore.relationshipgroupstore.db.mapped_memory", "10M",
-                "neostore.propertystore.db.mapped_memory", "300M",
-                "neostore.propertystore.db.strings.mapped_memory", "1G",
-                "neostore.propertystore.db.arrays.mapped_memory", "300M",
-                "neostore.propertystore.db.index.keys.mapped_memory", "100M",
-                "neostore.propertystore.db.index.mapped_memory", "100M",
-                "use_memory_mapped_buffers","true",
+                "dbms.pagecache.memory", System.getProperty("dbms.pagecache.memory","2G"),
                 "cache_type", "none"
         );
     }
@@ -62,6 +55,9 @@ public class StoreCopy {
         return new HashSet<String>(asList(args[index].toLowerCase().split(",")));
     }
 
+    interface Flusher {
+        void flush();
+    }
     private static void copyStore(String sourceDir, String targetDir, Set<String> ignoreRelTypes, Set<String> ignoreProperties, Set<String> ignoreLabels) throws Exception {
         final File target = new File(targetDir);
         final File source = new File(sourceDir);
@@ -74,16 +70,37 @@ public class StoreCopy {
         Pair<Long, Long> highestIds = getHighestNodeId(source);
         BatchInserter targetDb = BatchInserters.inserter(target.getAbsolutePath(), config());
         BatchInserter sourceDb = BatchInserters.inserter(source.getAbsolutePath(), config());
+        Flusher flusher = getFlusher(sourceDb);
+
         logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
 
-        long firstNode = firstNode(sourceDb, highestIds.first());
-        copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, highestIds.first());
-        copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, highestIds.other(), firstNode);
-
+        copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, highestIds.first(),flusher);
+        copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, highestIds.other(), flusher);
         targetDb.shutdown();
         sourceDb.shutdown();
         logs.close();
         copyIndex(source, target);
+    }
+
+    private static Flusher getFlusher(BatchInserter db) {
+        try {
+            Field field = BatchInserterImpl.class.getDeclaredField("flushStrategy");
+            field.setAccessible(true);
+            final Object flushStrategy = field.get(db);
+            final Method forceFlush = flushStrategy.getClass().getDeclaredMethod("forceFlush");
+            forceFlush.setAccessible(true);
+            return new Flusher() {
+                @Override public void flush() {
+                    try {
+                        forceFlush.invoke(flushStrategy);
+                    } catch (IllegalAccessException | InvocationTargetException e) {
+                        throw new RuntimeException("Error invoking flush strategy",e);
+                    }
+                }
+            };
+        } catch (NoSuchMethodException | IllegalAccessException | NoSuchFieldException e) {
+            throw new RuntimeException("Error accessing flush strategy", e);
+        }
     }
 
     private static Pair<Long, Long> getHighestNodeId(File source) {
@@ -106,7 +123,7 @@ public class StoreCopy {
         }
     }
 
-    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, long highestRelId, long firstNode) {
+    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, long highestRelId, Flusher flusher) {
         long time = System.currentTimeMillis();
         long relId = 0;
         long notFound = 0;
@@ -114,17 +131,19 @@ public class StoreCopy {
             BatchRelationship rel = null;
             String type = null;
             try {
+                rel = sourceDb.getRelationshipById(relId);
+                type = rel.getType().name();
+                relId++;
+                if (!ignoreRelTypes.contains(type.toLowerCase())) {
+                    createRelationship(targetDb, sourceDb, rel, ignoreProperties);
+                }
                 if (relId % 10000 == 0) {
                     System.out.print(".");
                 }
                 if (relId % 500000 == 0) {
-                    flushCache(sourceDb, firstNode);
+                    flusher.flush();
                     System.out.println(" " + relId + " / " + highestRelId + " (" + 100 *((float)relId / highestRelId) + "%)");
                 }
-                rel = sourceDb.getRelationshipById(relId++);
-                type = rel.getType().name();
-                if (ignoreRelTypes.contains(type.toLowerCase())) continue;
-                createRelationship(targetDb, sourceDb, rel, ignoreProperties);
             } catch (Exception e) {
                 if (e instanceof org.neo4j.kernel.impl.store.InvalidRecordException && e.getMessage().endsWith("not in use")) {
                    notFound++;
@@ -157,23 +176,24 @@ public class StoreCopy {
         }
     }
 
-    private static void copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, long highestNodeId) {
+    private static void copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, long highestNodeId, Flusher flusher) {
         long time = System.currentTimeMillis();
-        int node = -1;
+        int node = 0;
         long notFound = 0;
-        while (++node <= highestNodeId) {
+        while (node <= highestNodeId) {
             try {
-              if (node % 10000 == 0) {
-                  System.out.print(".");
+              if (sourceDb.nodeExists(node)) {
+                 targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node, ignoreLabels));
               }
-              if (node % 500000 == 0) {
-                  flushCache(sourceDb, node);
-                  logs.flush();
-                  System.out.println(" " + node + " / " + highestNodeId + " (" + 100 *((float)node / highestNodeId) + "%)");
-              }
-
-              if (!sourceDb.nodeExists(node)) continue;
-              targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node,ignoreLabels));
+              node++;
+                if (node % 10000 == 0) {
+                    System.out.print(".");
+                }
+                if (node % 500000 == 0) {
+                    flusher.flush();
+                    logs.flush();
+                    System.out.println(" " + node + " / " + highestNodeId + " (" + 100 *((float)node / highestNodeId) + "%)");
+                }
             }
             catch (Exception e) {
                 if (e instanceof org.neo4j.kernel.impl.store.InvalidRecordException && e.getMessage().endsWith("not in use")) {
@@ -182,17 +202,6 @@ public class StoreCopy {
             }
         }
         System.out.println("\n copying of " + node + " node records took " + (System.currentTimeMillis() - time) + " ms. Unused Records " + notFound);
-    }
-
-    private static void flushCache(BatchInserter sourceDb, long node) {
-        Map<String, Object> nodeProperties = sourceDb.getNodeProperties(node);
-        Iterator<Map.Entry<String, Object>> iterator = nodeProperties.entrySet().iterator();
-        if (iterator.hasNext()) {
-            Map.Entry<String, Object> firstProp = iterator.next();
-            sourceDb.nodeHasProperty(node,firstProp.getKey());
-            sourceDb.setNodeProperty(node, firstProp.getKey(), firstProp.getValue()); // force flush
-            System.out.print("F");
-        }
     }
 
     private static Label[] labelsArray(BatchInserter db, long node, Set<String> ignoreLabels) {
