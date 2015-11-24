@@ -11,7 +11,7 @@ it rewrites the store file reclaiming space that is sitting empty.
 
 ### Store Copy
 
-    copy-store.sh source.db target.db [RELS,TO,SKIP] [props,to,skip] [Labels,To,Skip]"
+    copy-store.sh source.db target.db [RELS,TO,SKIP] [props,to,skip] [Labels,To,Skip]
 
 Database config is read from `neo4j.properties` file in current directory if it exists.
 The provided one contains:
@@ -26,6 +26,7 @@ Heap config is in the shell-script, default is:
 **Please adapt the settings as needed for your store.**
 
 Change the Neo4j version in pom.xml before running as needed. (Currently 2.3.1)
+
 Optionally changeable from the outside with `-Dneo4j.version=2.3.0` on the `mvn` invocation.
 
 ### Internally
