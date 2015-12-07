@@ -70,7 +70,7 @@ public class StoreCopy {
         Pair<Long, Long> highestIds = getHighestNodeId(source);
         BatchInserter targetDb = BatchInserters.inserter(target.getAbsolutePath(), config());
         BatchInserter sourceDb = BatchInserters.inserter(source.getAbsolutePath(), config());
-        Flusher flusher = getFlusher(sourceDb);
+        Flusher flusher = getFlusher(sourceDb, firstNode(sourceDb,highestIds.first()));
 
         logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
 
@@ -82,7 +82,7 @@ public class StoreCopy {
         copyIndex(source, target);
     }
 
-    private static Flusher getFlusher(BatchInserter db) {
+    private static Flusher getFlusher(final BatchInserter db, final long nodeWithProps) {
         try {
             Field field = BatchInserterImpl.class.getDeclaredField("flushStrategy");
             field.setAccessible(true);
@@ -92,6 +92,7 @@ public class StoreCopy {
             return new Flusher() {
                 @Override public void flush() {
                     try {
+                        flushCache(db,nodeWithProps);
                         forceFlush.invoke(flushStrategy);
                     } catch (IllegalAccessException | InvocationTargetException e) {
                         throw new RuntimeException("Error invoking flush strategy",e);
@@ -131,25 +132,25 @@ public class StoreCopy {
             BatchRelationship rel = null;
             String type = null;
             try {
-                rel = sourceDb.getRelationshipById(relId);
+                rel = sourceDb.getRelationshipById(relId++);
                 type = rel.getType().name();
-                relId++;
                 if (!ignoreRelTypes.contains(type.toLowerCase())) {
                     createRelationship(targetDb, sourceDb, rel, ignoreProperties);
                 }
-                if (relId % 10000 == 0) {
-                    System.out.print(".");
-                }
-                if (relId % 500000 == 0) {
-                    flusher.flush();
-                    System.out.println(" " + relId + " / " + highestRelId + " (" + 100 *((float)relId / highestRelId) + "%)");
-                }
             } catch (Exception e) {
                 if (e instanceof org.neo4j.kernel.impl.store.InvalidRecordException && e.getMessage().endsWith("not in use")) {
-                   notFound++;
+                    notFound++;
                 } else {
-                   addLog(rel, "copy Relationship: " + (relId - 1) + "-[:" + type + "]" + "->?", e.getMessage());
+                    addLog(rel, "copy Relationship: " + (relId - 1) + "-[:" + type + "]" + "->?", e.getMessage());
                 }
+            }
+            if (relId % 10000 == 0) {
+                System.out.print(".");
+                logs.flush();
+            }
+            if (relId % 500000 == 0) {
+                flusher.flush();
+                System.out.printf(" %d / %d (%.0f%%) unused %d%n", relId, highestRelId, 100 * ((float) relId / highestRelId), notFound);
             }
         }
         System.out.println("\n copying of "+relId+" relationship records took "+(System.currentTimeMillis()-time)+" ms. Unused Records "+notFound);
@@ -158,9 +159,20 @@ public class StoreCopy {
     private static long firstNode(BatchInserter sourceDb, long highestNodeId) {
         int node = -1;
         while (++node <= highestNodeId) {
-            if (sourceDb.nodeExists(node)) return node;
+            if (sourceDb.nodeExists(node) && !sourceDb.getNodeProperties(node).isEmpty()) return node;
         }
         return -1;
+    }
+
+    private static void flushCache(BatchInserter sourceDb, long node) {
+        Map<String, Object> nodeProperties = sourceDb.getNodeProperties(node);
+        Iterator<Map.Entry<String, Object>> iterator = nodeProperties.entrySet().iterator();
+        if (iterator.hasNext()) {
+            Map.Entry<String, Object> firstProp = iterator.next();
+            sourceDb.nodeHasProperty(node,firstProp.getKey());
+            sourceDb.setNodeProperty(node, firstProp.getKey(), firstProp.getValue()); // force flush
+            System.out.print(" flush");
+        }
     }
 
     private static void createRelationship(BatchInserter targetDb, BatchInserter sourceDb, BatchRelationship rel, Set<String> ignoreProperties) {
@@ -182,23 +194,22 @@ public class StoreCopy {
         long notFound = 0;
         while (node <= highestNodeId) {
             try {
-              if (sourceDb.nodeExists(node)) {
-                 targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node, ignoreLabels));
-              }
-              node++;
-                if (node % 10000 == 0) {
-                    System.out.print(".");
+                if (sourceDb.nodeExists(node)) {
+                    targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node, ignoreLabels));
                 }
-                if (node % 500000 == 0) {
-                    flusher.flush();
-                    logs.flush();
-                    System.out.println(" " + node + " / " + highestNodeId + " (" + 100 *((float)node / highestNodeId) + "%)");
-                }
-            }
-            catch (Exception e) {
+            } catch (Exception e) {
                 if (e instanceof org.neo4j.kernel.impl.store.InvalidRecordException && e.getMessage().endsWith("not in use")) {
-                    notFound += 1;
+                    notFound++;
                 } else addLog(node, e.getMessage());
+            }
+            node++;
+            if (node % 10000 == 0) {
+                System.out.print(".");
+            }
+            if (node % 500000 == 0) {
+                flusher.flush();
+                logs.flush();
+                System.out.printf(" %d / %d (%.0f%%)%n unused %d", node, highestNodeId, 100 * ((float) node / highestNodeId), notFound);
             }
         }
         System.out.println("\n copying of " + node + " node records took " + (System.currentTimeMillis() - time) + " ms. Unused Records " + notFound);
