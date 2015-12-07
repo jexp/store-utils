@@ -9,15 +9,10 @@ import org.neo4j.io.fs.FileUtils;
 import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.kernel.IdGeneratorFactory;
 import org.neo4j.kernel.IdType;
-import org.neo4j.unsafe.batchinsert.BatchInserter;
-import org.neo4j.unsafe.batchinsert.BatchInserterImpl;
-import org.neo4j.unsafe.batchinsert.BatchInserters;
-import org.neo4j.unsafe.batchinsert.BatchRelationship;
+import org.neo4j.unsafe.batchinsert.*;
 
 import java.io.*;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.*;
 
 import static java.util.Arrays.asList;
@@ -70,7 +65,7 @@ public class StoreCopy {
         Pair<Long, Long> highestIds = getHighestNodeId(source);
         BatchInserter targetDb = BatchInserters.inserter(target.getAbsolutePath(), config());
         BatchInserter sourceDb = BatchInserters.inserter(source.getAbsolutePath(), config());
-        Flusher flusher = getFlusher(sourceDb, firstNode(sourceDb,highestIds.first()));
+        Flusher flusher = getFlusher(sourceDb);
 
         logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
 
@@ -82,25 +77,26 @@ public class StoreCopy {
         copyIndex(source, target);
     }
 
-    private static Flusher getFlusher(final BatchInserter db, final long nodeWithProps) {
+    private static Flusher getFlusher(final BatchInserter db) {
         try {
-            Field field = BatchInserterImpl.class.getDeclaredField("flushStrategy");
+            Field field = BatchInserterImpl.class.getDeclaredField("recordAccess");
             field.setAccessible(true);
-            final Object flushStrategy = field.get(db);
-            final Method forceFlush = flushStrategy.getClass().getDeclaredMethod("forceFlush");
-            forceFlush.setAccessible(true);
+            final DirectRecordAccessSet recordAccessSet = (DirectRecordAccessSet) field.get(db);
+            final Field cacheField = DirectRecordAccess.class.getDeclaredField("batch");
+            cacheField.setAccessible(true);
             return new Flusher() {
                 @Override public void flush() {
                     try {
-                        flushCache(db,nodeWithProps);
-                        forceFlush.invoke(flushStrategy);
-                    } catch (IllegalAccessException | InvocationTargetException e) {
-                        throw new RuntimeException("Error invoking flush strategy",e);
+                        ((Map) cacheField.get(recordAccessSet.getNodeRecords())).clear();
+                        ((Map) cacheField.get(recordAccessSet.getRelRecords())).clear();
+                        ((Map) cacheField.get(recordAccessSet.getPropertyRecords())).clear();
+                    } catch (IllegalAccessException e) {
+                        throw new RuntimeException("Error clearing cache "+cacheField,e);
                     }
                 }
             };
-        } catch (NoSuchMethodException | IllegalAccessException | NoSuchFieldException e) {
-            throw new RuntimeException("Error accessing flush strategy", e);
+        } catch (IllegalAccessException | NoSuchFieldException e) {
+            throw new RuntimeException("Error accessing cache field ", e);
         }
     }
 
@@ -150,10 +146,16 @@ public class StoreCopy {
             }
             if (relId % 500000 == 0) {
                 flusher.flush();
-                System.out.printf(" %d / %d (%.0f%%) unused %d%n", relId, highestRelId, 100 * ((float) relId / highestRelId), notFound);
+                System.out.printf(" %d / %d (%d%%) unused %d%n", relId, highestRelId, percent(relId,highestRelId), notFound);
             }
         }
-        System.out.println("\n copying of "+relId+" relationship records took "+(System.currentTimeMillis()-time)+" ms. Unused Records "+notFound);
+        time = (System.currentTimeMillis() - time) / 1000;
+        System.out.printf("%n copying of %d relationship records took %d seconds (%d rec/s). Unused Records %d (%d%%)%n",
+                relId, time, relId/time, notFound, percent(notFound,relId));
+    }
+
+    private static int percent(Number part, Number total) {
+        return (int) (100 * part.floatValue() / total.floatValue());
     }
 
     private static long firstNode(BatchInserter sourceDb, long highestNodeId) {
@@ -196,6 +198,8 @@ public class StoreCopy {
             try {
                 if (sourceDb.nodeExists(node)) {
                     targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node, ignoreLabels));
+                } else {
+                    notFound++;
                 }
             } catch (Exception e) {
                 if (e instanceof org.neo4j.kernel.impl.store.InvalidRecordException && e.getMessage().endsWith("not in use")) {
@@ -209,10 +213,12 @@ public class StoreCopy {
             if (node % 500000 == 0) {
                 flusher.flush();
                 logs.flush();
-                System.out.printf(" %d / %d (%.0f%%)%n unused %d", node, highestNodeId, 100 * ((float) node / highestNodeId), notFound);
+                System.out.printf(" %d / %d (%d%%)%n unused %d", node, highestNodeId, percent(node,highestNodeId), notFound);
             }
         }
-        System.out.println("\n copying of " + node + " node records took " + (System.currentTimeMillis() - time) + " ms. Unused Records " + notFound);
+        time = (System.currentTimeMillis() - time)/1000;
+        System.out.printf("%n copying of %d node records took %d seconds (%d rec/s). Unused Records %d (%d%%)%n",
+                node, time, node/time, notFound, percent(notFound,node));
     }
 
     private static Label[] labelsArray(BatchInserter db, long node, Set<String> ignoreLabels) {
