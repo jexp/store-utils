@@ -4,7 +4,7 @@ import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.collection.IteratorUtil;
 import org.neo4j.helpers.collection.MapUtil;
-import org.neo4j.io.fs.FileUtils;
+import org.neo4j.kernel.impl.util.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -57,11 +57,15 @@ public class StoreComparer {
         GraphDatabaseService targetDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(target.getAbsolutePath()).setConfig(config()).newGraphDatabase();
         GraphDatabaseService sourceDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(sourceDir).setConfig(config()).newGraphDatabase();
 
-        try (Transaction srcDbTx = sourceDb.beginTx();
-             Transaction targetDbTx = targetDb.beginTx()) {
+        Transaction srcDbTx = sourceDb.beginTx();
+        Transaction targetDbTx = targetDb.beginTx();
+        try {
             compareCounts(sourceDb, targetDb, ignoreRelTypes, ignoreProperties);
             compareNodes(sourceDb, targetDb, ignoreProperties);
             compareRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties);
+        } finally {
+            srcDbTx.close();
+            targetDbTx.close();
         }
 
         targetDb.shutdown();

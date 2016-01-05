@@ -9,7 +9,7 @@ echo "Usage: copy-store.sh source.db target.db [RELS,TO,SKIP] [props,to,skip] [L
 echo "Database config is read from neo4j.properties file in current directory if it exists"
 
 # heap config
-export MAVEN_OPTS="-Xmx$HEAP -Xms$HEAP -Xmn1G -XX:+UseG1GC"
+export MAVEN_OPTS="-Xmx$HEAP -Xms$HEAP -Xmn1G -XX:+UseG1GC -XX:+DoEscapeAnalysis -XX:+UseBiasedLocking -XX:MaxInlineSize=64 -server"
 
 mvn compile exec:java -e -Dexec.mainClass="org.neo4j.tool.StoreCopy" -Ddbms.pagecache.memory=$CACHE \
       -Dexec.args="$SRC $DST $SKIP_RELS $SKIP_PROPS $SKIP_LABELS"

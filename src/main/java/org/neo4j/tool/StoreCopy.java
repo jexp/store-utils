@@ -5,10 +5,11 @@ import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.Pair;
 import org.neo4j.helpers.collection.IteratorUtil;
 import org.neo4j.helpers.collection.MapUtil;
-import org.neo4j.io.fs.FileUtils;
 import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.kernel.IdGeneratorFactory;
 import org.neo4j.kernel.IdType;
+import org.neo4j.kernel.impl.nioneo.store.InvalidRecordException;
+import org.neo4j.kernel.impl.util.FileUtils;
 import org.neo4j.unsafe.batchinsert.*;
 
 import java.io.*;
@@ -27,6 +28,15 @@ public class StoreCopy {
     public static Map<String, String> config() {
         return (Map) MapUtil.map(
                 "dbms.pagecache.memory", System.getProperty("dbms.pagecache.memory","2G"),
+                "neostore.nodestore.db.mapped_memory", "250M",
+                "neostore.relationshipstore.db.mapped_memory", "2G",
+                "neostore.relationshipgroupstore.db.mapped_memory", "100M",
+                "neostore.propertystore.db.mapped_memory", "1G",
+                "neostore.propertystore.db.strings.mapped_memory", "500M",
+                "neostore.propertystore.db.arrays.mapped_memory", "300M",
+                "neostore.propertystore.db.index.keys.mapped_memory", "10M",
+                "neostore.propertystore.db.index.mapped_memory", "10M",
+                "use_memory_mapped_buffers", "true",
                 "cache_type", "none"
         );
     }
@@ -103,8 +113,8 @@ public class StoreCopy {
     private static Pair<Long, Long> getHighestNodeId(File source) {
         GraphDatabaseAPI api = (GraphDatabaseAPI) new GraphDatabaseFactory().newEmbeddedDatabase(source.getAbsolutePath());
         IdGeneratorFactory idGenerators = api.getDependencyResolver().resolveDependency(IdGeneratorFactory.class);
-        long highestNodeId = idGenerators.get(IdType.NODE).getHighestPossibleIdInUse();
-        long highestRelId = idGenerators.get(IdType.RELATIONSHIP).getHighestPossibleIdInUse();
+        long highestNodeId = idGenerators.get(IdType.NODE).getHighId();
+        long highestRelId = idGenerators.get(IdType.RELATIONSHIP).getHighId();
         api.shutdown();
         return Pair.of(highestNodeId, highestRelId);
     }
@@ -134,7 +144,7 @@ public class StoreCopy {
                     createRelationship(targetDb, sourceDb, rel, ignoreProperties);
                 }
             } catch (Exception e) {
-                if (e instanceof org.neo4j.kernel.impl.store.InvalidRecordException && e.getMessage().endsWith("not in use")) {
+                if (e instanceof InvalidRecordException && e.getMessage().endsWith("not in use")) {
                    notFound++;
                 } else {
                    addLog(rel, "copy Relationship: " + (relId - 1) + "-[:" + type + "]" + "->?", e.getMessage());
@@ -192,7 +202,7 @@ public class StoreCopy {
                 }
             }
             catch (Exception e) {
-                if (e instanceof org.neo4j.kernel.impl.store.InvalidRecordException && e.getMessage().endsWith("not in use")) {
+                if (e instanceof InvalidRecordException && e.getMessage().endsWith("not in use")) {
                     notFound += 1;
                 } else addLog(node, e.getMessage());
             }
@@ -203,7 +213,7 @@ public class StoreCopy {
             if (node % 500000 == 0) {
                 flusher.flush();
                 logs.flush();
-                System.out.printf(" %d / %d (%d%%)%n unused %d", node, highestNodeId, percent(node,highestNodeId), notFound);
+                System.out.printf(" %d / %d (%d%%) unused %d%n", node, highestNodeId, percent(node,highestNodeId), notFound);
             }
         }
         time = Math.max(1,(System.currentTimeMillis() - time)/1000);
