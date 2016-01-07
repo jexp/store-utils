@@ -149,7 +149,7 @@ public class StoreCopy {
                 System.out.printf(" %d / %d (%d%%) unused %d%n", relId, highestRelId, percent(relId,highestRelId), notFound);
             }
         }
-        time = (System.currentTimeMillis() - time) / 1000;
+        time = Math.max(1,(System.currentTimeMillis() - time)/1000);
         System.out.printf("%n copying of %d relationship records took %d seconds (%d rec/s). Unused Records %d (%d%%)%n",
                 relId, time, relId/time, notFound, percent(notFound,relId));
     }
@@ -216,7 +216,7 @@ public class StoreCopy {
                 System.out.printf(" %d / %d (%d%%)%n unused %d", node, highestNodeId, percent(node,highestNodeId), notFound);
             }
         }
-        time = (System.currentTimeMillis() - time)/1000;
+        time = Math.max(1,(System.currentTimeMillis() - time)/1000);
         System.out.printf("%n copying of %d node records took %d seconds (%d rec/s). Unused Records %d (%d%%)%n",
                 node, time, node/time, notFound, percent(notFound,node));
     }
