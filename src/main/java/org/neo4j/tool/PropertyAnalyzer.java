@@ -3,7 +3,6 @@ package org.neo4j.tool;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.collection.MapUtil;
-import org.neo4j.kernel.EmbeddedGraphDatabase;
 
 import java.lang.reflect.Array;
 import java.util.*;

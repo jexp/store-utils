@@ -5,7 +5,6 @@ import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
-import org.neo4j.kernel.EmbeddedGraphDatabase;
 
 import java.util.Arrays;
 
@@ -39,14 +38,15 @@ public class GraphGenerator {
                     System.out.print(".");
                     if ((i % 10000) == 0) {
                         tx.success();
-                        tx.finish();
+                        tx.close();
                         System.out.println(" " + i);
                         tx = graphdb.beginTx();
                     }
                 }
             }
         } finally {
-            tx.finish();
+            tx.success();
+            tx.close();
         }
         System.out.println();
         long delta = (System.currentTimeMillis() - cpuTime);
