@@ -6,6 +6,7 @@ import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 
+import java.io.File;
 import java.util.Arrays;
 
 /**
@@ -16,7 +17,7 @@ public class GraphGenerator {
     public static final int MILLION = 1000 * 1000;
 
     public static void main(String[] args) {
-        final GraphDatabaseService gdb = new GraphDatabaseFactory().newEmbeddedDatabase("target/data");
+        final GraphDatabaseService gdb = new GraphDatabaseFactory().newEmbeddedDatabase(new File("target/data"));
         createDatabase(gdb);
         gdb.shutdown();
     }

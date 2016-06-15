@@ -4,6 +4,7 @@ import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.collection.MapUtil;
 
+import java.io.File;
 import java.lang.reflect.Array;
 import java.util.*;
 
@@ -95,7 +96,7 @@ public class PropertyAnalyzer {
     }
 
     public static void main(String[] args) {
-        final GraphDatabaseService db = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(args[0]).setConfig(config()).newGraphDatabase();
+        final GraphDatabaseService db = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(new File(args[0])).setConfig(config()).newGraphDatabase();
         int withoutProps=0, nodes = 0, rels = 0;
         Map<String,PropertyInfo> props=new HashMap<String, PropertyInfo>();
         for (Node node : db.getAllNodes()) {

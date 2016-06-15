@@ -2,7 +2,7 @@ package org.neo4j.tool;
 
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
-import org.neo4j.helpers.collection.IteratorUtil;
+import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.io.fs.FileUtils;
 
@@ -11,7 +11,6 @@ import java.io.IOException;
 import java.util.*;
 
 import static java.util.Arrays.asList;
-import static java.util.Arrays.toString;
 import static java.util.Collections.emptySet;
 
 public class StoreComparer {
@@ -54,8 +53,8 @@ public class StoreComparer {
         if (!target.exists()) throw new IllegalArgumentException("Target Directory does not exists " + target);
         if (!source.exists()) throw new IllegalArgumentException("Source Database does not exist " + source);
 
-        GraphDatabaseService targetDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(target.getAbsolutePath()).setConfig(config()).newGraphDatabase();
-        GraphDatabaseService sourceDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(sourceDir).setConfig(config()).newGraphDatabase();
+        GraphDatabaseService targetDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(target).setConfig(config()).newGraphDatabase();
+        GraphDatabaseService sourceDb = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(source).setConfig(config()).newGraphDatabase();
 
         try (Transaction srcDbTx = sourceDb.beginTx();
              Transaction targetDbTx = targetDb.beginTx()) {
@@ -100,7 +99,7 @@ public class StoreComparer {
     }
 
     private static int countProperties(Set<String> ignoreProperties, PropertyContainer node) {
-        final Collection<String> keys = IteratorUtil.addToCollection(node.getPropertyKeys(), new HashSet<String>());
+        final Collection<String> keys = Iterables.addToCollection(node.getPropertyKeys(), new HashSet<String>());
         keys.removeAll(ignoreProperties);
         return keys.size();
     }
@@ -144,8 +143,8 @@ public class StoreComparer {
     }
 
     private static void compareProperties(PropertyContainer pc1, PropertyContainer pc2, Set<String> ignoreProperties) {
-        final Collection<String> keys1 = IteratorUtil.addToCollection(pc1.getPropertyKeys(), new HashSet<String>());
-        final Collection<String> keys2 = IteratorUtil.addToCollection(pc2.getPropertyKeys(), new HashSet<String>());
+        final Collection<String> keys1 = Iterables.addToCollection(pc1.getPropertyKeys(), new HashSet<String>());
+        final Collection<String> keys2 = Iterables.addToCollection(pc2.getPropertyKeys(), new HashSet<String>());
         keys2.removeAll(ignoreProperties);
         keys1.removeAll(ignoreProperties);
         if (!keys1.equals(keys2)) {

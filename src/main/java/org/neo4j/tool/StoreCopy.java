@@ -2,7 +2,7 @@ package org.neo4j.tool;
 
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
-import org.neo4j.helpers.collection.IteratorUtil;
+import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.helpers.collection.Pair;
 import org.neo4j.io.fs.FileUtils;
@@ -10,6 +10,7 @@ import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
 import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.unsafe.batchinsert.*;
+import org.neo4j.unsafe.batchinsert.internal.BatchInserterImpl;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -63,8 +64,8 @@ public class StoreCopy {
         if (!source.exists()) throw new IllegalArgumentException("Source Database does not exist " + source);
 
         Pair<Long, Long> highestIds = getHighestNodeId(source);
-        BatchInserter targetDb = BatchInserters.inserter(target.getAbsolutePath(), config());
-        BatchInserter sourceDb = BatchInserters.inserter(source.getAbsolutePath(), config());
+        BatchInserter targetDb = BatchInserters.inserter(target, config());
+        BatchInserter sourceDb = BatchInserters.inserter(source, config());
         Flusher flusher = getFlusher(sourceDb);
 
         logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
@@ -101,7 +102,7 @@ public class StoreCopy {
     }
 
     private static Pair<Long, Long> getHighestNodeId(File source) {
-        GraphDatabaseAPI api = (GraphDatabaseAPI) new GraphDatabaseFactory().newEmbeddedDatabase(source.getAbsolutePath());
+        GraphDatabaseAPI api = (GraphDatabaseAPI) new GraphDatabaseFactory().newEmbeddedDatabase(source);
         IdGeneratorFactory idGenerators = api.getDependencyResolver().resolveDependency(IdGeneratorFactory.class);
         long highestNodeId = idGenerators.get(IdType.NODE).getHighestPossibleIdInUse();
         long highestRelId = idGenerators.get(IdType.RELATIONSHIP).getHighestPossibleIdInUse();
@@ -222,7 +223,7 @@ public class StoreCopy {
     }
 
     private static Label[] labelsArray(BatchInserter db, long node, Set<String> ignoreLabels) {
-        Collection<Label> labels = IteratorUtil.asCollection(db.getNodeLabels(node));
+        Collection<Label> labels = Iterables.asCollection(db.getNodeLabels(node));
         if (labels.isEmpty()) return NO_LABELS;
         if (!ignoreLabels.isEmpty()) {
             for (Iterator<Label> it = labels.iterator(); it.hasNext(); ) {

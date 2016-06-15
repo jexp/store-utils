@@ -4,6 +4,7 @@ import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.collection.MapUtil;
 
+import java.io.File;
 import java.util.Map;
 
 /**
@@ -29,7 +30,7 @@ public class StoreUpdate {
     public static void main(String[] args) {
         GraphDatabaseService db = null;
         try {
-            db = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder("target/data").setConfig(config()).newGraphDatabase();
+            db = new GraphDatabaseFactory().newEmbeddedDatabaseBuilder(new File("target/data")).setConfig(config()).newGraphDatabase();
         } finally {
             if (db != null) db.shutdown();
         }

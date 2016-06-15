@@ -3,8 +3,9 @@ package org.neo4j.tool;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
-import org.neo4j.helpers.collection.IteratorUtil;
+import org.neo4j.helpers.collection.Iterables;
 
+import java.io.File;
 import java.util.*;
 
 /**
@@ -73,13 +74,13 @@ public class DomainAnalyzer {
         }
     }
 	public static void main(String[] args) {
-        graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(args[0]);
+        graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(new File(args[0]));
 
         long time = System.currentTimeMillis();
         Map<Set<String>,Sample> statistics = new HashMap<Set<String>, Sample>();
         int count = 0;
         for (Node node : graphDb.getAllNodes()) {
-            final HashSet<String> keys = IteratorUtil.addToCollection(node.getPropertyKeys(), new HashSet<String>());
+            final HashSet<String> keys = Iterables.addToCollection(node.getPropertyKeys(), new HashSet<String>());
             Sample sample = statistics.get(keys);
             if (sample==null) {
                 sample = new Sample(node);
