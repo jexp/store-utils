@@ -2,6 +2,7 @@ package org.neo4j.tool;
 
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
+import org.neo4j.helpers.Exceptions;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.helpers.collection.Pair;
@@ -73,7 +74,11 @@ public class StoreCopy {
         copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, highestIds.first(),flusher);
         copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, highestIds.other(), flusher);
         targetDb.shutdown();
-        sourceDb.shutdown();
+        try {
+            sourceDb.shutdown();
+        } catch (Exception e) {
+            logs.append(String.format("Noncritical error closing the source database:%n%s", Exceptions.stringify(e)));
+        }
         logs.close();
         copyIndex(source, target);
     }
