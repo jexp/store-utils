@@ -10,6 +10,7 @@ CACHE=2G
 echo "Usage: copy-store.sh [community|enterprise] source.db target.db [RELS,TO,SKIP] [props,to,skip] [Labels,To,Skip]"
 echo "Database config is read from neo4j.properties file in current directory if it exists"
 echo "Using: Heap $HEAP Pagecache $CACHE Edition $EDITION from $SRC to $DST skipping labels: $SKIP_LABELS rels: $SKIP_RELS props $SKIP_PROPS"
+echo "Please note that you will need twice the memory (2x $CACHE + 1x $HEAP) as it opens 2 databases one for reading and one for writing."
 # heap config
 export MAVEN_OPTS="-Xmx$HEAP -Xms$HEAP -Xmn1G -XX:+UseG1GC"
 
