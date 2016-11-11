@@ -24,8 +24,9 @@ Heap config is in the shell-script, default is:
     export MAVEN_OPTS="-Xmx4G -Xms4G -Xmn1G -XX:+UseG1GC"
 
 **Please adapt the settings as needed for your store.**
+**Please note that you will need twice the memory (2x page-cache + 1x heap) as it opens 2 databases one for reading and one for writing.**
 
-Change the Neo4j version in pom.xml before running as needed. (Currently 2.3.1)
+Change the Neo4j version in pom.xml before running as needed. (Currently 2.3.4)
 
 Optionally changeable from the outside with `-Dneo4j.version=2.3.0` on the `mvn` invocation.
 
