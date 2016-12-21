@@ -4,7 +4,7 @@
 
     <groupId>org.neo4j</groupId>
     <artifactId>store-util</artifactId>
-    <version>3.0.3</version>
+    <version>3.0.8</version>
     <packaging>jar</packaging>
 
     <name>store-util</name>
@@ -24,6 +24,9 @@
                     <version>${neo4j.version}</version>
                 </dependency>
             </dependencies>
+        </profile>
+        <profile>
+            <id>community</id>
         </profile>
     </profiles>
     <dependencies>
