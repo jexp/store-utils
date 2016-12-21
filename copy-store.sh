@@ -6,6 +6,24 @@ SKIP_LABELS=$5
 HEAP=4G
 CACHE=2G
 echo "Usage: copy-store.sh source.db target.db [RELS,TO,SKIP] [props,to,skip] [Labels,To,Skip]"
+
+if [[ "$SRC" = "enterprise" || "$SRC" = "community" ]]
+then
+    echo "ATTENTION: The source '$SRC' you passed is the same as an edition 'community/enterprise' for the 3.x version of this tool. Aborting."
+    exit
+fi
+if [[ "$SRC" = "" || "$DST" = "" ]]
+then
+    echo "ATTENTION: Source '$SRC' or target '$DST' directory not provided. Aborting."
+    exit
+fi
+
+if [[ ! -d $SRC ]]
+then
+    echo "ATTENTION: Source '$SRC' is not a directory. Aborting."
+    exit
+fi
+
 echo "Database config is read from neo4j.properties file in current directory if it exists"
 echo "Using: Heap $HEAP Pagecache $CACHE Edition $EDITION from $SRC to $DST skipping labels: $SKIP_LABELS rels: $SKIP_RELS props $SKIP_PROPS"
 echo "Please note that you will need twice the memory (2x $CACHE + 1x $HEAP) as it opens 2 databases one for reading and one for writing."
