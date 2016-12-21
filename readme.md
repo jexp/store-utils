@@ -9,7 +9,7 @@ Also useful to skip no longer wanted properties or relationships with a certain 
 Good for store compaction and reorganization of relationships and properties as
 it rewrites the store file reclaiming space that is sitting empty.
 
-NOTE: With Neo4j 3.0 there are two different store formats, so you have to provide "enterprise" or "community" as first argument of the call!
+NOTE: With Neo4j 3.x there are two different store formats, so you have to provide "enterprise" or "community" as first argument of the call!
 
 ### Store Copy
 
@@ -28,9 +28,9 @@ Heap config is in the shell-script, default is:
 
 **Please note that you will need twice the memory (2x page-cache + 1x heap) as it opens 2 databases one for reading and one for writing.**
 
-Change the Neo4j version in pom.xml before running as needed. (Currently 3.0.0-M05)
+Change the Neo4j version in pom.xml before running as needed. (Currently 3.1.0)
 
-Optionally changeable from the outside with `-Dneo4j.version=3.0.0` on the `mvn` invocation.
+Optionally changeable from the outside with `-Dneo4j.version=3.1.0` on the `mvn` invocation.
 
 ### Internally
 
