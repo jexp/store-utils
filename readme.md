@@ -13,9 +13,16 @@ NOTE: With Neo4j 3.0 there are two different store formats, so you have to provi
 
 ### Store Copy
 
+    # Make sure apache maven is installed, e.g. from https://maven.apache.org/
+    # clone or download the repository
+    git clone https://github.com/jexp/store-utils
+    cd store-utils
     copy-store.sh [enterprise|community] source.db target.db [RELS,TO,SKIP] [props,to,skip] [Labels,To,Skip]
+    # for example
+    copy-store.sh community .../graph.db.backup .../graph.db.copied FATHER_OF,MOTHER_OF aged,lived Mother,Father
 
 Database config is read from `neo4j.properties` file in current directory if it exists.
+
 The provided one contains:
 
     dbms.pagecache.memory=2G
