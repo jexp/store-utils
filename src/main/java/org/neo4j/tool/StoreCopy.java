@@ -11,7 +11,7 @@ import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
 import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.unsafe.batchinsert.*;
-import org.neo4j.unsafe.batchinsert.internal.BatchInserterImpl;
+import org.neo4j.unsafe.batchinsert.internal.*;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -83,8 +83,11 @@ public class StoreCopy {
         copyIndex(source, target);
     }
 
-    private static Flusher getFlusher(final BatchInserter db) {
+    private static Flusher getFlusher(BatchInserter db) {
         try {
+            Field delegate = FileSystemClosingBatchInserter.class.getDeclaredField("delegate");
+            delegate.setAccessible(true);
+            db = (BatchInserter)delegate.get(db);
             Field field = BatchInserterImpl.class.getDeclaredField("recordAccess");
             field.setAccessible(true);
             final DirectRecordAccessSet recordAccessSet = (DirectRecordAccessSet) field.get(db);
