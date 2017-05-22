@@ -25,14 +25,6 @@ public class StoreCopy {
     private static final Label[] NO_LABELS = new Label[0];
     private static PrintWriter logs;
 
-    @SuppressWarnings("unchecked")
-    public static Map<String, String> config() {
-        return (Map) MapUtil.map(
-                "dbms.pagecache.memory", System.getProperty("dbms.pagecache.memory","2G"),
-                "cache_type", "none"
-        );
-    }
-
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
             System.err.println("Usage: StoryCopy source target [rel,types,to,ignore] [properties,to,ignore]");
@@ -65,8 +57,9 @@ public class StoreCopy {
         if (!source.exists()) throw new IllegalArgumentException("Source Database does not exist " + source);
 
         Pair<Long, Long> highestIds = getHighestNodeId(source);
-        BatchInserter targetDb = BatchInserters.inserter(target, config());
-        BatchInserter sourceDb = BatchInserters.inserter(source, config());
+        String pageCacheSize = System.getProperty("dbms.pagecache.memory","2G");
+        BatchInserter targetDb = BatchInserters.inserter(target, MapUtil.stringMap("dbms.pagecache.memory", pageCacheSize));
+        BatchInserter sourceDb = BatchInserters.inserter(source, MapUtil.stringMap("dbms.pagecache.memory", System.getProperty("dbms.pagecache.memory.source",pageCacheSize)));
         Flusher flusher = getFlusher(sourceDb);
 
         logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
