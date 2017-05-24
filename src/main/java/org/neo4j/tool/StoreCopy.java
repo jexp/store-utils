@@ -161,7 +161,7 @@ public class StoreCopy {
     }
 
     private static long firstNode(BatchInserter sourceDb, long highestNodeId) {
-        int node = -1;
+        long node = -1;
         while (++node <= highestNodeId) {
             if (sourceDb.nodeExists(node) && !sourceDb.getNodeProperties(node).isEmpty()) return node;
         }
@@ -194,7 +194,7 @@ public class StoreCopy {
 
     private static void copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, long highestNodeId, Flusher flusher) {
         long time = System.currentTimeMillis();
-        int node = 0;
+        long node = 0;
         long notFound = 0;
         while (node <= highestNodeId) {
             try {
