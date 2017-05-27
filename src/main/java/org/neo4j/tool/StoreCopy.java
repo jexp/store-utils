@@ -1,5 +1,7 @@
 package org.neo4j.tool;
 
+import org.neo4j.collection.primitive.Primitive;
+import org.neo4j.collection.primitive.PrimitiveLongLongMap;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.Exceptions;
@@ -27,27 +29,38 @@ public class StoreCopy {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
-            System.err.println("Usage: StoryCopy source target [rel,types,to,ignore] [properties,to,ignore]");
+            System.err.println("Usage: StoryCopy source target [rel,types,to,ignore] [properties,to,ignore] [labels,to,ignore] [labels,to,delete]");
             return;
         }
-        String sourceDir = args[0];
-        String targetDir = args[1];
-        Set<String> ignoreRelTypes = splitOptionIfExists(args, 2);
-        Set<String> ignoreProperties = splitOptionIfExists(args, 3);
-        Set<String> ignoreLabels = splitOptionIfExists(args, 4);
-        System.out.printf("Copying from %s to %s ingoring rel-types %s ignoring properties %s ignoring labels %s %n", sourceDir, targetDir, ignoreRelTypes, ignoreProperties,ignoreLabels);
-        copyStore(sourceDir, targetDir, ignoreRelTypes, ignoreProperties,ignoreLabels);
+        Properties properties = new Properties();
+        properties.load(new FileReader("neo4j.properties"));
+        String sourceDir = getArgument(args,0,properties,"source_db_dir");
+        String targetDir = getArgument(args,1,properties,"target_db_dir");
+
+        Set<String> ignoreRelTypes = splitToSet(getArgument(args,2,properties,"rel_types_to_ignore"));
+        Set<String> ignoreProperties = splitToSet(getArgument(args,3,properties,"properties_to_ignore"));
+        Set<String> ignoreLabels = splitToSet(getArgument(args,4,properties,"labels_to_ignore"));
+        Set<String> deleteNodesWithLabels = splitToSet(getArgument(args,5,properties,"labels_to_delete"));
+        String keepNodeIdsParam = getArgument(args, 6, properties, "keep_node_ids");
+        boolean keepNodeIds = !("false".equalsIgnoreCase(keepNodeIdsParam));
+        System.out.printf("Copying from %s to %s ingoring rel-types %s ignoring properties %s ignoring labels %s removing nodes with labels %s keep node ids %s %n", sourceDir, targetDir, ignoreRelTypes, ignoreProperties,ignoreLabels, deleteNodesWithLabels,keepNodeIds);
+        copyStore(sourceDir, targetDir, ignoreRelTypes, ignoreProperties,ignoreLabels,deleteNodesWithLabels, keepNodeIds);
     }
 
-    private static Set<String> splitOptionIfExists(String[] args, final int index) {
-        if (args.length <= index) return emptySet();
-        return new HashSet<String>(asList(args[index].toLowerCase().split(",")));
+    private static String getArgument(String[] args, int index, Properties properties, String key) {
+        if (args.length > index) return args[index];
+        return properties.getProperty(key);
+    }
+
+    private static Set<String> splitToSet(String value) {
+        if (value == null || value.trim().isEmpty()) return emptySet();
+        return new HashSet<>(asList(value.trim().split(", *")));
     }
 
     interface Flusher {
         void flush();
     }
-    private static void copyStore(String sourceDir, String targetDir, Set<String> ignoreRelTypes, Set<String> ignoreProperties, Set<String> ignoreLabels) throws Exception {
+    private static void copyStore(String sourceDir, String targetDir, Set<String> ignoreRelTypes, Set<String> ignoreProperties, Set<String> ignoreLabels, Set<String> deleteNodesWithLabels, boolean stableNodeIds) throws Exception {
         final File target = new File(targetDir);
         final File source = new File(sourceDir);
         if (target.exists()) {
@@ -64,8 +77,8 @@ public class StoreCopy {
 
         logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
 
-        copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, highestIds.first(),flusher);
-        copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, highestIds.other(), flusher);
+        PrimitiveLongLongMap copiedNodeIds = copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, deleteNodesWithLabels, highestIds.first(),flusher, stableNodeIds);
+        copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, copiedNodeIds, highestIds.other(), flusher);
         targetDb.shutdown();
         try {
             sourceDb.shutdown();
@@ -122,18 +135,23 @@ public class StoreCopy {
         }
     }
 
-    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, long highestRelId, Flusher flusher) {
+    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, PrimitiveLongLongMap copiedNodeIds, long highestRelId, Flusher flusher) {
         long time = System.currentTimeMillis();
         long relId = 0;
         long notFound = 0;
+        long removed = 0;
         while (relId <= highestRelId) {
             BatchRelationship rel = null;
             String type = null;
             try {
                 rel = sourceDb.getRelationshipById(relId++);
                 type = rel.getType().name();
-                if (!ignoreRelTypes.contains(type.toLowerCase())) {
-                    createRelationship(targetDb, sourceDb, rel, ignoreProperties);
+                if (!ignoreRelTypes.contains(type)) {
+                    if (!createRelationship(targetDb, sourceDb, rel, ignoreProperties, copiedNodeIds)) {
+                        removed++;
+                    }
+                } else {
+                    removed++;
                 }
             } catch (Exception e) {
                 if (e instanceof org.neo4j.kernel.impl.store.InvalidRecordException && e.getMessage().endsWith("not in use")) {
@@ -148,12 +166,12 @@ public class StoreCopy {
             }
             if (relId % 500000 == 0) {
                 flusher.flush();
-                System.out.printf(" %d / %d (%d%%) unused %d%n", relId, highestRelId, percent(relId,highestRelId), notFound);
+                System.out.printf(" %d / %d (%d%%) unused %d removed %d%n", relId, highestRelId, percent(relId,highestRelId), notFound,removed);
             }
         }
         time = Math.max(1,(System.currentTimeMillis() - time)/1000);
-        System.out.printf("%n copying of %d relationship records took %d seconds (%d rec/s). Unused Records %d (%d%%)%n",
-                relId, time, relId/time, notFound, percent(notFound,relId));
+        System.out.printf("%n copying of %d relationship records took %d seconds (%d rec/s). Unused Records %d (%d%%) Removed Records %d (%d%%)%n",
+                relId, time, relId/time, notFound, percent(notFound,relId),removed, percent(removed,relId));
     }
 
     private static int percent(Number part, Number total) {
@@ -179,27 +197,42 @@ public class StoreCopy {
         }
     }
 
-    private static void createRelationship(BatchInserter targetDb, BatchInserter sourceDb, BatchRelationship rel, Set<String> ignoreProperties) {
-        long startNodeId = rel.getStartNode();
-        long endNodeId = rel.getEndNode();
+    private static boolean createRelationship(BatchInserter targetDb, BatchInserter sourceDb, BatchRelationship rel, Set<String> ignoreProperties, PrimitiveLongLongMap copiedNodeIds) {
+        long startNodeId = copiedNodeIds.get(rel.getStartNode());
+        long endNodeId = copiedNodeIds.get(rel.getEndNode());
+        if (startNodeId == -1L || endNodeId == -1L) return false;
         final RelationshipType type = rel.getType();
         try {
             Map<String, Object> props = getProperties(sourceDb.getRelationshipProperties(rel.getId()), ignoreProperties);
 //            if (props.isEmpty()) props = Collections.<String,Object>singletonMap("old_id",rel.getId()); else props.put("old_id",rel.getId());
             targetDb.createRelationship(startNodeId, endNodeId, type, props);
+            return true;
         } catch (Exception e) {
             addLog(rel, "create Relationship: " + startNodeId + "-[:" + type + "]" + "->" + endNodeId, e.getMessage());
+            return false;
         }
     }
 
-    private static void copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, long highestNodeId, Flusher flusher) {
+    private static PrimitiveLongLongMap copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, Set<String> deleteNodesWithLabels, long highestNodeId, Flusher flusher, boolean stableNodeIds) {
+        PrimitiveLongLongMap copiedNodes = Primitive.offHeapLongLongMap();
         long time = System.currentTimeMillis();
         long node = 0;
         long notFound = 0;
+        long removed = 0;
         while (node <= highestNodeId) {
             try {
                 if (sourceDb.nodeExists(node)) {
-                    targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node, ignoreLabels));
+                    if (labelInSet(sourceDb.getNodeLabels(node),deleteNodesWithLabels)) {
+                        removed ++;
+                    } else {
+                        long newNodeId=node;
+                        if (stableNodeIds) {
+                            targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node, ignoreLabels));
+                        } else {
+                            newNodeId = targetDb.createNode(getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node, ignoreLabels));
+                        }
+                        copiedNodes.put(node,newNodeId);
+                    }
                 } else {
                     notFound++;
                 }
@@ -215,12 +248,21 @@ public class StoreCopy {
             if (node % 500000 == 0) {
                 flusher.flush();
                 logs.flush();
-                System.out.printf(" %d / %d (%d%%)%n unused %d", node, highestNodeId, percent(node,highestNodeId), notFound);
+                System.out.printf(" %d / %d (%d%%) unused %d removed %d%n", node, highestNodeId, percent(node,highestNodeId), notFound, removed);
             }
         }
         time = Math.max(1,(System.currentTimeMillis() - time)/1000);
-        System.out.printf("%n copying of %d node records took %d seconds (%d rec/s). Unused Records %d (%d%%)%n",
-                node, time, node/time, notFound, percent(notFound,node));
+        System.out.printf("%n copying of %d node records took %d seconds (%d rec/s). Unused Records %d (%d%%). Removed Records %d (%d%%).%n",
+                node, time, node/time, notFound, percent(notFound,node),removed, percent(removed,node));
+        return copiedNodes;
+    }
+
+    private static boolean labelInSet(Iterable<Label> nodeLabels, Set<String> labelSet) {
+        if (labelSet == null || labelSet.isEmpty()) return false;
+        for (Label nodeLabel : nodeLabels) {
+            if (labelSet.contains(nodeLabel.name())) return true;
+        }
+        return false;
     }
 
     private static Label[] labelsArray(BatchInserter db, long node, Set<String> ignoreLabels) {
@@ -229,7 +271,7 @@ public class StoreCopy {
         if (!ignoreLabels.isEmpty()) {
             for (Iterator<Label> it = labels.iterator(); it.hasNext(); ) {
                 Label label = it.next();
-                if (ignoreLabels.contains(label.name().toLowerCase())) {
+                if (ignoreLabels.contains(label.name())) {
                     it.remove();
                 }
             }
@@ -238,7 +280,9 @@ public class StoreCopy {
     }
 
     private static Map<String, Object> getProperties(Map<String, Object> pc, Set<String> ignoreProperties) {
-        if (!ignoreProperties.isEmpty()) pc.keySet().removeAll(ignoreProperties);
+        if (pc.isEmpty()) return Collections.emptyMap();
+        if (ignoreProperties.isEmpty()) return pc;
+        pc.keySet().removeAll(ignoreProperties);
         return pc;
     }
 
