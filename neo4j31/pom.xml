@@ -1,0 +1,70 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.neo4j.util</groupId>
+        <artifactId>store-util-parent</artifactId>
+        <version>3.2.0</version>
+    </parent>
+
+    <artifactId>store-util-impl-3.1</artifactId>
+    <version>3.2.0</version>
+    <packaging>jar</packaging>
+
+    <name>store-util-impl-3.1</name>
+
+    <properties>
+        <neo4j.version>3.1.5</neo4j.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-kernel</artifactId>
+            <version>${neo4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-lucene-index</artifactId>
+            <version>${neo4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.neo4j.util</groupId>
+            <artifactId>store-util-api</artifactId>
+            <version>3.2.0</version>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <filters>
+                        <filter>
+                            <artifact>*:*</artifact>
+                            <excludes>
+                                <exclude>META-INF/*.SF</exclude>
+                                <exclude>META-INF/*.DSA</exclude>
+                                <exclude>META-INF/*.RSA</exclude>
+                            </excludes>
+                        </filter>
+                    </filters>
+                    <transformers>
+                        <transformer
+                                implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                    </transformers>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

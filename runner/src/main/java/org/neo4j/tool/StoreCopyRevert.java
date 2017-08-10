@@ -21,22 +21,6 @@ public class StoreCopyRevert {
 
     private static Map<String,Integer> stats = new TreeMap<>();
 
-    @SuppressWarnings("unchecked")
-    public static Map<String, String> config() {
-        return new HashMap<String,String>() {
-            {
-                put("neostore.nodestore.db.mapped_memory", "100M");
-                put("neostore.relationshipstore.db.mapped_memory", "500M");
-                put("neostore.propertystore.db.mapped_memory", "300M");
-                put("neostore.propertystore.db.strings.mapped_memory", "1G");
-                put("neostore.propertystore.db.arrays.mapped_memory", "300M");
-                put("neostore.propertystore.db.index.keys.mapped_memory", "100M");
-                put("neostore.propertystore.db.index.mapped_memory", "100M");
-                put("cache_type", "none");
-            }
-        };
-    }
-
     private static void record(String type,String...labels) {
         for (String label : labels) {
             label = type + ":"+label;
@@ -54,7 +38,7 @@ public class StoreCopyRevert {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
-            System.err.println("Usage: StoryCopy source:version target:version [rel,types,to,ignore] [properties,to,ignore]");
+            System.err.println("Usage: StoryCopyRevert source:version target:version [rel,types,to,ignore] [properties,to,ignore]");
             return;
         }
         String[] sourceDir = args[0].split(":");
@@ -85,17 +69,33 @@ public class StoreCopyRevert {
         StoreReader sourceDb = null;
         StoreWriter targetDb = null;
         try {
-            sourceDb = createInstance("org.neo4j.tool.impl.StoreBatchReader20", fromVersion);
-            sourceDb.init(source.getAbsolutePath(), config());
-            targetDb = createInstance("org.neo4j.tool.impl.StoreBatchWriter20", toVersion);
-            targetDb.init(target.getAbsolutePath(), config());
+            sourceDb = createInstance("org.neo4j.tool.impl.StoreBatchReaderImpl", fromVersion);
+            String sourcePageCache = System.getProperty("source.page.cache","1g");;
+            sourceDb.init(source.getAbsolutePath(), sourcePageCache);
+            targetDb = createInstance("org.neo4j.tool.impl.StoreBatchWriterImpl", toVersion);
+            String targetPageCache = System.getProperty("target.page.cache",sourcePageCache);
+            targetDb.init(target.getAbsolutePath(), targetPageCache);
 
             copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels);
             copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties);
 
         } finally {
-            if (targetDb!=null) targetDb.shutdown();
-            if (sourceDb!=null) sourceDb.shutdown();
+            if (targetDb!=null) {
+                try {
+                    targetDb.shutdown();
+                } catch (Exception e) {
+                    System.err.println("Error shutting down target database");
+                    e.printStackTrace();
+                }
+            }
+            if (sourceDb!=null) {
+                try {
+                    sourceDb.shutdown();
+                } catch (Exception e) {
+                    System.err.println("Error shutting down source database");
+                    e.printStackTrace();
+                }
+            }
             printStats();
             logs.close();
             copyIndex(source, target);
@@ -104,12 +104,7 @@ public class StoreCopyRevert {
 
     public static <T extends StoreHandler> T createInstance(String name, String version) {
         try {
-            File kernel = neo4jJar(version, "kernel");
-            File coll = neo4jJar(version, "primitive-collections");
-            File luceneIndex = neo4jJar(version, "lucene-index");
-            File lucene = lucene("3.6.2");
-            File myClasses = new File("neo4j20/target/classes");
-            URLClassLoader classLoader = new URLClassLoader(new URL[] {kernel.toURL(),coll.toURL(),luceneIndex.toURL(),lucene.toURL(),jta().toURL(),commonsIO().toURL(),myClasses.toURL()},StoreCopyRevert.class.getClassLoader());
+            URLClassLoader classLoader = new URLClassLoader(new URL[] {jar(version).toURL()},StoreCopyRevert.class.getClassLoader());
             Class<?> targetClass = classLoader.loadClass(name);
             return (T)targetClass.newInstance();
         } catch(Exception e) {
@@ -117,17 +112,8 @@ public class StoreCopyRevert {
         }
     }
 
-    private static File neo4jJar(String version, String module) {
-        return new File(System.getProperty("user.home"), ".m2/repository/org/neo4j/neo4j-" + module + "/" +version+ "/neo4j-" + module + "-" +version+".jar");
-    }
-    private static File lucene(String version) {
-        return new File(System.getProperty("user.home"), ".m2/repository/org/apache/lucene/lucene-core/"+ version +"/lucene-core-" + version + ".jar");
-    }
-    private static File jta() {
-        return new File(System.getProperty("user.home"), ".m2/repository/org/apache/geronimo/specs/geronimo-jta_1.1_spec/1.1.1/geronimo-jta_1.1_spec-1.1.1.jar");
-    }
-    private static File commonsIO() {
-        return new File(System.getProperty("user.home"), ".m2/repository/org/apache/commons/commons-io/1.3.2/commons-io-1.3.2.jar");
+    private static File jar(String version) {
+        return new File(System.getProperty("user.home"), ".m2/repository/org/neo4j/util/store-util-impl-"+version+"/3.2.0/store-util-impl-"+version+"-3.2.0.jar");
     }
 
     private static void copyIndex(File source, File target) throws IOException {

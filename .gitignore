@@ -1,7 +1,11 @@
+*.db
+dbs
 .DS_Store
 target
 *.iws
 *.iml
 *.ipr
 .idea
-
+dependency-reduced-pom.xml
+.shell_history
+neo4j.conf

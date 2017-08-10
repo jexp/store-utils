@@ -4,7 +4,7 @@
 
     <groupId>org.neo4j.util</groupId>
     <artifactId>store-util-parent</artifactId>
-    <version>2.0.1</version>
+    <version>3.2.0</version>
     <packaging>pom</packaging>
 
     <name>store-util-parent</name>
@@ -15,7 +15,11 @@
 
     <modules>
         <module>api</module>
-        <module>neo4j20</module>
+        <module>neo4j22</module>
+        <module>neo4j23</module>
+        <module>neo4j30</module>
+        <module>neo4j31</module>
+        <module>neo4j32</module>
         <module>runner</module>
     </modules>
 
@@ -31,11 +35,6 @@
             <artifactId>commons-io</artifactId>
             <version>1.3.2</version>
         </dependency>
-        <dependency>
-            <groupId>org.neo4j</groupId>
-            <artifactId>store-util-api</artifactId>
-            <version>${project.version}</version>
-        </dependency>
     </dependencies>
 
 
@@ -46,25 +45,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>2.3.2</version>
                 <configuration>
-                    <source>1.7</source>
-                    <target>1.7</target>
-                    <compilerArgument>-Xlint:all</compilerArgument>
-                    <showWarnings>true</showWarnings>
-                    <showDeprecation>false</showDeprecation>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <configuration>
-                    <archive>
-                        <manifest>
-                            <mainClass>org.neo4j.tool.StoreCopy</mainClass>
-                        </manifest>
-                    </archive>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
+                    <source>1.8</source>
+                    <target>1.8</target>
                 </configuration>
             </plugin>
 
@@ -80,7 +62,7 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <!--<mainClass>org.neo4j.tool.StoreCopy</mainClass>-->
+                    <mainClass>org.neo4j.tool.StoreCopyRevert</mainClass>
                 </configuration>
             </plugin>
         </plugins>

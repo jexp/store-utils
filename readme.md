@@ -1,7 +1,7 @@
 ## Tools to copy Neo4j Stores between versions
 
 Uses the batch-inserter API to read and write the stores keeping the node-ids.
-Copies the index-files as is.
+Copies the manual index-files as is.
 Ignores broken nodes and relationships.
 
 Also useful to skip no longer wanted properties or relationships with a certain type. Good for store compaction as it
@@ -13,17 +13,22 @@ It uses local .m2 repositories of the Neo4j versions that you provide.
 
 Usage:
 
+    # build all the shadow-jars
+    mvn clean install
+    
+    cd runner
     mvn compile exec:java -Dexec.mainClass="org.neo4j.tool.StoreCopyRevert" \
-      -Dexec.args="source:version target:version [rel,types,to,ignore] [properties,to,ignore]"
+      -Dexec.args="/path/to/source:version /path/to/target:version [rel,types,to,ignore] [properties,to,ignore]"
 
 e.g. 
 
     mvn compile exec:java -Dexec.mainClass="org.neo4j.tool.StoreCopyRevert" \
-      -Dexec.args="test.db:1.9.8 fixed.db:2.0.0 :FOO bar"
+      -Dexec.args="/backup/test.db:3.2 /tmp/fixed.db:3.1 :FOO bar"
 
 Supported versions
 
-* 1.9.8
-* 2.0.0
-* 2.2.1
-* 2.2.0-M03
+* 3.1.5
+* 3.2.3
+* 3.0.11
+* 2.3.11
+* 2.2.10
