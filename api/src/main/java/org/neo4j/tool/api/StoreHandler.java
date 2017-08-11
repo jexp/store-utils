@@ -9,4 +9,5 @@ import java.io.IOException;
 public interface StoreHandler {
     void init(String dir, String pageCache) throws IOException;
     void shutdown();
+    void flush();
 }

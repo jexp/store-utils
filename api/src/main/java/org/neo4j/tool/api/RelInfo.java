@@ -16,4 +16,8 @@ public class RelInfo {
     public RelInfo(long id) {
         this.id = id;
     }
+
+    public String toString() {
+        return from + "-[:" + type + "]" + "->" + to;
+    }
 }

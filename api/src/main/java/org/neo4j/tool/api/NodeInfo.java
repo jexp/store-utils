@@ -7,7 +7,7 @@ import java.util.Map;
 * @since 10.06.14
 */
 public class NodeInfo {
-    public final long id;
+    public long id;
     public Map<String,Object> data;
     public String[] labels;
 

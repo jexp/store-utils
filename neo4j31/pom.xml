@@ -35,6 +35,21 @@
             <version>3.2.0</version>
         </dependency>
     </dependencies>
+    <profiles>
+        <profile>
+            <id>enterprise</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.neo4j</groupId>
+                    <artifactId>neo4j-enterprise-kernel</artifactId>
+                    <version>${neo4j.version}</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>community</id>
+        </profile>
+    </profiles>
     <build>
         <plugins>
             <plugin>

@@ -16,7 +16,11 @@ public class StoreBatchWriterImpl extends StoreBatchHandlerImpl implements Store
 
     @Override
     public void createNode(NodeInfo node) {
-        batchInserter.createNode(node.id, node.data, labels(node));
+        if (node.id == -1) {
+            node.id = batchInserter.createNode(node.data, labels(node));
+        } else {
+            batchInserter.createNode(node.id, node.data, labels(node));
+        }
     }
 
     @Override

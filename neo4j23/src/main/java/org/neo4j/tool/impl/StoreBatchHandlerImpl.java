@@ -8,11 +8,11 @@ import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.tool.api.NodeInfo;
 import org.neo4j.tool.api.RelInfo;
 import org.neo4j.tool.api.StoreHandler;
-import org.neo4j.unsafe.batchinsert.BatchInserter;
-import org.neo4j.unsafe.batchinsert.BatchInserters;
+import org.neo4j.unsafe.batchinsert.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
@@ -25,6 +25,7 @@ public class StoreBatchHandlerImpl implements StoreHandler {
 
     static Label[] NO_LABELS = new Label[0];
     public static final String[] NO_LABELS_NAMES = new String[0];
+    private Runnable flusher;
 
     protected String[] toLabelStrings(long id) {
         Iterator<Label> labels = batchInserter.getNodeLabels(id).iterator();
@@ -58,10 +59,39 @@ public class StoreBatchHandlerImpl implements StoreHandler {
     public void init(String dir, String pageCache) throws IOException {
         this.dir = dir;
         batchInserter = BatchInserters.inserter(new File(dir), MapUtil.stringMap("dbms.pagecache.memory", pageCache));
+        flusher = getFlusher(batchInserter);
+    }
+
+    @Override
+    public void flush() {
+        flusher.run();
     }
 
     @Override
     public void shutdown() {
         batchInserter.shutdown();
+    }
+
+    private static Runnable getFlusher(final BatchInserter db) {
+        try {
+            Field field = BatchInserterImpl.class.getDeclaredField("recordAccess");
+            field.setAccessible(true);
+            final DirectRecordAccessSet recordAccessSet = (DirectRecordAccessSet) field.get(db);
+            final Field cacheField = DirectRecordAccess.class.getDeclaredField("batch");
+            cacheField.setAccessible(true);
+            return new Runnable() {
+                @Override public void run() {
+                    try {
+                        ((Map) cacheField.get(recordAccessSet.getNodeRecords())).clear();
+                        ((Map) cacheField.get(recordAccessSet.getRelRecords())).clear();
+                        ((Map) cacheField.get(recordAccessSet.getPropertyRecords())).clear();
+                    } catch (IllegalAccessException e) {
+                        throw new RuntimeException("Error clearing cache "+cacheField,e);
+                    }
+                }
+            };
+        } catch (IllegalAccessException | NoSuchFieldException e) {
+            throw new RuntimeException("Error accessing cache field ", e);
+        }
     }
 }
