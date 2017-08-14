@@ -3,9 +3,9 @@
 Uses the BatchInserterImpl to read a store and write the target store keeping the node-ids.
 Copies the manual (legacy) index-files as is, please note it performs no index upgrade!
 
-You will have to recreate any schema indexes too.
+**You will have to recreate any schema indexes too.**
 
-Ignores broken nodes and relationships and records them in `target/store-copy.log`
+Ignores broken nodes and relationships and records them in `$targetdb/store-copy.log`
 
 Also useful to skip no longer wanted properties, relationships with a certain type.
 Or of certain labels and even nodes with certain labels.
@@ -13,7 +13,8 @@ Or of certain labels and even nodes with certain labels.
 Good for store compaction and reorganization of relationships and properties as
 it rewrites the store file reclaiming space that is sitting empty.
 
-NOTE: With Neo4j 3.x there are two different store formats, so you have to provide "enterprise" or "community" as first argument of the call!
+NOTE: 
+*With Neo4j 3.x there are two different store formats, so you have to provide "enterprise" or "community" as first argument of the call!*
 
 You can now also decide if you want to compact the node-store, then you have to pass "false" as the parameter for keep-node-ids.
 
@@ -38,7 +39,7 @@ bad_entries_log_dir=
 
 ### Store Copy
 
-    copy-store.sh [enterprise|community] source.db target.db [RELS,TO,SKIP] [props,to,skip] [Labels,To,Skip] [Labels,To,Delete,Nodes] [keep-node-ids:true/false]
+    copy-store.sh [enterprise|community] source.db:version-from target.db:version-to [RELS,TO,SKIP] [props,to,skip] [Labels,To,Skip] [Labels,To,Delete,Nodes] [keep-node-ids:true/false]
 
 The provided script contains these settings for page-cache (note you can configure a different, smaller setting for the source store than the target store).
 
