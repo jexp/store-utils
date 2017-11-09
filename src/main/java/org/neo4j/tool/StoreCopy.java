@@ -14,6 +14,7 @@ import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.unsafe.batchinsert.*;
 import org.neo4j.unsafe.batchinsert.internal.*;
+import org.neo4j.values.storable.Value;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -187,12 +188,12 @@ public class StoreCopy {
     }
 
     private static void flushCache(BatchInserter sourceDb, long node) {
-        Map<String, Object> nodeProperties = sourceDb.getNodeProperties(node);
-        Iterator<Map.Entry<String, Object>> iterator = nodeProperties.entrySet().iterator();
+        Map<String, Value> nodeProperties = sourceDb.getNodeProperties(node);
+        Iterator<Map.Entry<String, Value>> iterator = nodeProperties.entrySet().iterator();
         if (iterator.hasNext()) {
-            Map.Entry<String, Object> firstProp = iterator.next();
+            Map.Entry<String, Value> firstProp = iterator.next();
             sourceDb.nodeHasProperty(node,firstProp.getKey());
-            sourceDb.setNodeProperty(node, firstProp.getKey(), firstProp.getValue()); // force flush
+            sourceDb.setNodeProperty(node, firstProp.getKey(), firstProp.getValue().asObject()); // force flush
             System.out.print(" flush");
         }
     }
@@ -279,11 +280,14 @@ public class StoreCopy {
         return labels.toArray(new Label[labels.size()]);
     }
 
-    private static Map<String, Object> getProperties(Map<String, Object> pc, Set<String> ignoreProperties) {
+    private static Map<String, Object> getProperties(Map<String, Value> pc, Set<String> ignoreProperties) {
         if (pc.isEmpty()) return Collections.emptyMap();
-        if (ignoreProperties.isEmpty()) return pc;
-        pc.keySet().removeAll(ignoreProperties);
-        return pc;
+        Map<String,Object> result = new HashMap<>(pc.size());
+        if (!ignoreProperties.isEmpty()) {
+            pc.keySet().removeAll(ignoreProperties);
+        }
+        pc.forEach((k,v) -> result.put(k,v.asObject()));
+        return result;
     }
 
     private static void addLog(BatchRelationship rel, String property, String message) {
