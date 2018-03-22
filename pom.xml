@@ -4,7 +4,7 @@
 
     <groupId>org.neo4j</groupId>
     <artifactId>store-util</artifactId>
-    <version>3.3.0</version>
+    <version>3.3.4</version>
     <packaging>jar</packaging>
 
     <name>store-util</name>
@@ -69,17 +69,24 @@
             </plugin>
 
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.1.0</version>
                 <configuration>
-                    <archive>
-                        <manifest>
-                            <mainClass>org.neo4j.tool.StoreCopy</mainClass>
-                        </manifest>
-                    </archive>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
+                    <formats><format>zip</format></formats>
+                    <descriptors>
+                        <descriptor>src/assembly/assembly.xml</descriptor>
+                    </descriptors>
+                    <finalName>store-util-${project.version}</finalName>
                 </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
 
             <plugin>

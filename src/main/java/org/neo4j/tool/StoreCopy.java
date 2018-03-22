@@ -65,8 +65,8 @@ public class StoreCopy {
         final File target = new File(targetDir);
         final File source = new File(sourceDir);
         if (target.exists()) {
-            FileUtils.deleteRecursively(target);
-            // throw new IllegalArgumentException("Target Directory already exists "+target);
+            // FileUtils.deleteRecursively(target);
+            throw new IllegalArgumentException("Target Directory already exists "+target);
         }
         if (!source.exists()) throw new IllegalArgumentException("Source Database does not exist " + source);
 
@@ -87,7 +87,7 @@ public class StoreCopy {
             logs.append(String.format("Noncritical error closing the source database:%n%s", Exceptions.stringify(e)));
         }
         logs.close();
-        copyIndex(source, target);
+        if (stableNodeIds) copyIndex(source, target);
     }
 
     private static Flusher getFlusher(BatchInserter db) {
@@ -188,12 +188,12 @@ public class StoreCopy {
     }
 
     private static void flushCache(BatchInserter sourceDb, long node) {
-        Map<String, Value> nodeProperties = sourceDb.getNodeProperties(node);
-        Iterator<Map.Entry<String, Value>> iterator = nodeProperties.entrySet().iterator();
+        Map<String, Object> nodeProperties = sourceDb.getNodeProperties(node);
+        Iterator<Map.Entry<String, Object>> iterator = nodeProperties.entrySet().iterator();
         if (iterator.hasNext()) {
-            Map.Entry<String, Value> firstProp = iterator.next();
+            Map.Entry<String, Object> firstProp = iterator.next();
             sourceDb.nodeHasProperty(node,firstProp.getKey());
-            sourceDb.setNodeProperty(node, firstProp.getKey(), firstProp.getValue().asObject()); // force flush
+            sourceDb.setNodeProperty(node, firstProp.getKey(), firstProp.getValue()); // force flush
             System.out.print(" flush");
         }
     }
@@ -270,24 +270,17 @@ public class StoreCopy {
         Collection<Label> labels = Iterables.asCollection(db.getNodeLabels(node));
         if (labels.isEmpty()) return NO_LABELS;
         if (!ignoreLabels.isEmpty()) {
-            for (Iterator<Label> it = labels.iterator(); it.hasNext(); ) {
-                Label label = it.next();
-                if (ignoreLabels.contains(label.name())) {
-                    it.remove();
-                }
-            }
+            labels.removeIf(label -> ignoreLabels.contains(label.name()));
         }
         return labels.toArray(new Label[labels.size()]);
     }
 
-    private static Map<String, Object> getProperties(Map<String, Value> pc, Set<String> ignoreProperties) {
+    private static Map<String, Object> getProperties(Map<String, Object> pc, Set<String> ignoreProperties) {
         if (pc.isEmpty()) return Collections.emptyMap();
-        Map<String,Object> result = new HashMap<>(pc.size());
         if (!ignoreProperties.isEmpty()) {
             pc.keySet().removeAll(ignoreProperties);
         }
-        pc.forEach((k,v) -> result.put(k,v.asObject()));
-        return result;
+        return pc;
     }
 
     private static void addLog(BatchRelationship rel, String property, String message) {

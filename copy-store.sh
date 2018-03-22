@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# NEO4J_HOME=${NEO4J_HOME-/var/lib/neo4j}
 EDITION=${1-community}
 shift
 SRC=$1
@@ -13,6 +14,7 @@ HEAP=4G
 CACHE=2G
 CACHE_SRC=1G
 #$CACHE
+echo "To use your existing Neo4j 3.3.x installation set NEO4J_HOME to your Neo4j directory. Currently set to: $NEO4J_HOME"
 echo "Usage: copy-store.sh [community|enterprise] source.db target.db [RELS,TO,SKIP] [props,to,skip] [Labels,To,Skip] [Labels,To,Delete,Nodes]"
 
 if [[ "$EDITION" != "enterprise" && "$EDITION" != "community" ]]
@@ -32,13 +34,26 @@ then
     exit
 fi
 
+echo
 echo "Using: Heap $HEAP Pagecache $CACHE Edition '$EDITION' from '$SRC' to '$DST' skipping labels: '$SKIP_LABELS', removing nodes with labels: '$DELETE_NODES' rels: '$SKIP_RELS' props '$SKIP_PROPS' Keeping Node Ids: $KEEP_NODE_IDS"
 echo
 echo "Please note that you will need this memory ($CACHE + $CACHE_SRC + $HEAP) as it opens 2 databases one for reading and one for writing."
+echo
 # heap config
 export MAVEN_OPTS="-Xmx$HEAP -Xms$HEAP -XX:+UseG1GC"
+MAVEN=`which mvn`
+JARFILE=`echo store-util-*.jar`
 
-mvn clean compile exec:java -P${EDITION} -e -Dexec.mainClass="org.neo4j.tool.StoreCopy" -Ddbms.pagecache.memory=$CACHE -Ddbms.pagecache.memory.source=$CACHE_SRC \
-      -Dexec.args="$SRC $DST $SKIP_RELS $SKIP_PROPS $SKIP_LABELS $DELETE_NODES $KEEP_NODE_IDS"
+if [[ -d "$NEO4J_HOME" && -f "$JARFILE" ]]; then
+   java $MAVEN_OPTS -Ddbms.pagecache.memory=$CACHE -Ddbms.pagecache.memory.source=$CACHE_SRC -classpath "$NEO4J_HOME/lib/*":$JARFILE org.neo4j.tool.StoreCopy \
+   $SRC $DST $SKIP_RELS $SKIP_PROPS $SKIP_LABELS $DELETE_NODES $KEEP_NODE_IDS
+else
+   if [[ ! -f $MAVEN ]]; then 
+      echo "Apache Maven not installed"
+   else
+      $MAVEN clean compile exec:java -P${EDITION} -e -Dexec.mainClass="org.neo4j.tool.StoreCopy" -Ddbms.pagecache.memory=$CACHE -Ddbms.pagecache.memory.source=$CACHE_SRC \
+         -Dexec.args="$SRC $DST $SKIP_RELS $SKIP_PROPS $SKIP_LABELS $DELETE_NODES $KEEP_NODE_IDS"
+   fi
+fi
 
 #-Dneo4j.version=2.3.0
