@@ -17,7 +17,26 @@ NOTE: With Neo4j 3.x there are two different store formats, so you have to provi
 
 You can now also decide if you want to compact the node-store, then you have to pass "false" as the parameter for keep-node-ids.
 
-Config is read from `neo4j.properties` file in current directory if it exists, but command line options override.
+
+### Usage
+
+Grab the release for your Neo4j version from: https://github.com/jexp/store-utils/releases
+
+```
+unzip store-util-*-release.zip 
+cd store-util-*/
+
+export NEO4J_HOME=/path/to/neo4j
+
+# remove target db
+rm -rf /path/to/fixed.db
+
+./copy-store.sh community /path/to/source.db /path/to/fixed.db
+```
+
+### Config 
+
+Config will read from `neo4j.properties` file in current directory if it exists, but command line options override.
 
 neo4j.properties
 
@@ -36,7 +55,7 @@ store_copy_log_dir=
 bad_entries_log_dir=
 ```
 
-### Store Copy
+### General Usage
 
     copy-store.sh [enterprise|community] source.db target.db [RELS,TO,SKIP] [props,to,skip] [Labels,To,Skip] [Labels,To,Delete,Nodes] [keep-node-ids:true/false]
 
@@ -46,7 +65,7 @@ The provided script contains these settings for page-cache (note you can configu
     dbms.pagecache.memory.source=2G
     dbms.pagecache.memory=2G
 
-Heap config is in the shell-script, default is:
+Heap config is in the shell-script, default is: 4 GB Heap
 
     export MAVEN_OPTS="-Xmx4G -Xms4G -Xmn1G -XX:+UseG1GC"
 
