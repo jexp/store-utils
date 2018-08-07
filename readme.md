@@ -73,9 +73,9 @@ Heap config is in the shell-script, default is: 4 GB Heap
 
 **Please note that you will need the memory for (source-page-cache + target-page-cache + 1x heap) as it opens 2 databases one for reading and one for writing.**
 
-Change the Neo4j version in pom.xml before running as needed. (Currently 3.1.0)
+Change the Neo4j version in pom.xml before running as needed. (Currently 3.4.5)
 
-Optionally changeable from the outside with `-Dneo4j.version=3.1.0` on the `mvn` invocation.
+Optionally changeable from the outside with `-Dneo4j.version=3.4.5` on the `mvn` invocation.
 
 ### Internally
 
