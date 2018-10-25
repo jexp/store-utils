@@ -10,6 +10,7 @@
             <includes>
                 <include>readme.md</include>
                 <include>copy-store.sh</include>
+                <include>LICENSE.txt</include>
                 <include>neo4j.properties</include>
             </includes>
             <outputDirectory>/</outputDirectory>
