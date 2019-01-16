@@ -1,9 +1,9 @@
 package org.neo4j.tool;
 
-import org.neo4j.collection.primitive.Primitive;
-import org.neo4j.collection.primitive.PrimitiveLongLongMap;
+import org.eclipse.collections.api.map.primitive.LongLongMap;
+import org.eclipse.collections.api.map.primitive.MutableLongLongMap;
+import org.eclipse.collections.impl.map.mutable.primitive.LongLongHashMap;
 import org.neo4j.graphdb.*;
-import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.helpers.collection.MapUtil;
@@ -15,6 +15,7 @@ import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.unsafe.batchinsert.*;
 import org.neo4j.unsafe.batchinsert.internal.*;
 import org.neo4j.values.storable.Value;
+import org.neo4j.graphdb.factory.*;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -78,7 +79,7 @@ public class StoreCopy {
 
         logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
 
-        PrimitiveLongLongMap copiedNodeIds = copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, deleteNodesWithLabels, highestIds.first(),flusher, stableNodeIds);
+        LongLongMap copiedNodeIds = copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, deleteNodesWithLabels, highestIds.first(),flusher, stableNodeIds);
         copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, copiedNodeIds, highestIds.other(), flusher);
         targetDb.shutdown();
         try {
@@ -136,7 +137,7 @@ public class StoreCopy {
         }
     }
 
-    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, PrimitiveLongLongMap copiedNodeIds, long highestRelId, Flusher flusher) {
+    private static void copyRelationships(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreRelTypes, Set<String> ignoreProperties, LongLongMap copiedNodeIds, long highestRelId, Flusher flusher) {
         long time = System.currentTimeMillis();
         long relId = 0;
         long notFound = 0;
@@ -198,7 +199,7 @@ public class StoreCopy {
         }
     }
 
-    private static boolean createRelationship(BatchInserter targetDb, BatchInserter sourceDb, BatchRelationship rel, Set<String> ignoreProperties, PrimitiveLongLongMap copiedNodeIds) {
+    private static boolean createRelationship(BatchInserter targetDb, BatchInserter sourceDb, BatchRelationship rel, Set<String> ignoreProperties, LongLongMap copiedNodeIds) {
         long startNodeId = copiedNodeIds.get(rel.getStartNode());
         long endNodeId = copiedNodeIds.get(rel.getEndNode());
         if (startNodeId == -1L || endNodeId == -1L) return false;
@@ -214,8 +215,8 @@ public class StoreCopy {
         }
     }
 
-    private static PrimitiveLongLongMap copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, Set<String> deleteNodesWithLabels, long highestNodeId, Flusher flusher, boolean stableNodeIds) {
-        PrimitiveLongLongMap copiedNodes = Primitive.offHeapLongLongMap();
+    private static LongLongMap copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, Set<String> deleteNodesWithLabels, long highestNodeId, Flusher flusher, boolean stableNodeIds) {
+        MutableLongLongMap copiedNodes = stableNodeIds ? new LongLongHashMap() : new LongLongHashMap((int)highestNodeId);
         long time = System.currentTimeMillis();
         long node = 0;
         long notFound = 0;

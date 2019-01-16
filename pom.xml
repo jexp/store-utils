@@ -4,7 +4,7 @@
 
     <groupId>org.neo4j</groupId>
     <artifactId>store-util</artifactId>
-    <version>3.4.5</version>
+    <version>3.5.1</version>
     <packaging>jar</packaging>
 
     <name>store-util</name>
@@ -30,9 +30,18 @@
     <profiles>
         <profile>
             <id>enterprise</id>
+
+
+            <repositories>
+                <repository>
+                    <id>neo4j-enterprise</id>
+                    <url>http://m2.neo4j.com/enterprise</url>
+                </repository>
+            </repositories>
+
             <dependencies>
                 <dependency>
-                    <groupId>org.neo4j</groupId>
+                    <groupId>com.neo4j</groupId>
                     <artifactId>neo4j-enterprise</artifactId>
                     <version>${neo4j.version}</version>
                 </dependency>
@@ -52,6 +61,16 @@
         <dependency>
             <groupId>org.neo4j</groupId>
             <artifactId>neo4j-io</artifactId>
+            <version>${neo4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j-common</artifactId>
+            <version>${neo4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.neo4j</groupId>
+            <artifactId>neo4j</artifactId>
             <version>${neo4j.version}</version>
         </dependency>
         <dependency>
