@@ -216,7 +216,7 @@ public class StoreCopy {
     }
 
     private static LongLongMap copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, Set<String> deleteNodesWithLabels, long highestNodeId, Flusher flusher, boolean stableNodeIds) {
-        MutableLongLongMap copiedNodes = stableNodeIds ? new LongLongHashMap() : new LongLongHashMap((int)highestNodeId);
+        MutableLongLongMap copiedNodes = stableNodeIds ? new LongLongHashMap() : new LongLongHashMap(highestNodeId > (long)Integer.MAX_VALUE ? Integer.MAX_VALUE : (int)highestNodeId);
         long time = System.currentTimeMillis();
         long node = 0;
         long notFound = 0;
