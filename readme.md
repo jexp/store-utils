@@ -17,7 +17,6 @@ NOTE: With Neo4j 3.x there are two different store formats, so you have to provi
 
 You can now also decide if you want to compact the node-store, then you have to pass "false" as the parameter for keep-node-ids.
 
-
 ### Usage
 
 Grab the release for your Neo4j version from: https://github.com/jexp/store-utils/releases
@@ -32,6 +31,18 @@ export NEO4J_HOME=/path/to/neo4j
 rm -rf /path/to/fixed.db
 
 ./copy-store.sh community /path/to/source.db /path/to/fixed.db
+```
+
+#### NOTICE
+
+**With Neo4j 3.5.x the location of the `store_lock` file changed to one level above the database directory, so please make sure that your source and target db don't share the same parent directory**
+
+Then you would see an error like this:
+
+```
+Exception in thread "main" org.neo4j.kernel.StoreLockException: Unable to obtain lock on store lock file: 
+/path/to/parent-folder/store_lock. 
+Please ensure no other process is using this database, and that the directory is writable (required even for read-only access)
 ```
 
 ### Config 
