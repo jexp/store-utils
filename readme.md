@@ -20,12 +20,14 @@ You can now also decide if you want to compact the node-store, then you have to 
 ### Usage
 
 Grab the release for your Neo4j version from: https://github.com/jexp/store-utils/releases
+Define the $NEO4J_HOME, the $NEO4J_HOME/lib should contain all the jars
 
 ```
 unzip store-util-*-release.zip 
 cd store-util-*/
 
-export NEO4J_HOME=/path/to/neo4j
+#MANDATORY: maven and internet access will be required if not set properly
+export NEO4J_HOME=/usr/share/neo4j
 
 # remove target db
 rm -rf /path/to/fixed.db
@@ -90,7 +92,9 @@ Optionally changeable from the outside with `-Dneo4j.version=3.4.5` on the `mvn`
 
 ### Internally
 
-Note: It calls under the hood:
+
+
+Note: maven is called under the hood :
 
     mvn compile exec:java -Dexec.mainClass="org.neo4j.tool.StoreCopy" -Penterprise \
       -Dexec.args="source-dir target-dir [REL,TYPES,TO,IGNORE] [properties,to,ignore] [Labels,To,Ignore] [Labels,To,Delete,Nodes] [keep-node-ids:true/false]"
