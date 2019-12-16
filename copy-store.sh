@@ -45,7 +45,7 @@ MAVEN=`which mvn`
 JARFILE=`echo store-util-*.jar`
 
 if [[ -d "$NEO4J_HOME" && -f "$JARFILE" ]]; then
-   java $MAVEN_OPTS -Ddbms.pagecache.memory=$CACHE -Ddbms.pagecache.memory.source=$CACHE_SRC -classpath "$NEO4J_HOME/lib/*":$JARFILE org.neo4j.tool.StoreCopy \
+   java $MAVEN_OPTS -Ddbms.pagecache.memory=$CACHE -Ddbms.pagecache.memory.source=$CACHE_SRC -classpath $JARFILE:"$NEO4J_HOME/lib/*" org.neo4j.tool.StoreCopy \
    $SRC $DST $SKIP_RELS $SKIP_PROPS $SKIP_LABELS $DELETE_NODES $KEEP_NODE_IDS
 else
    if [[ ! -f $MAVEN ]]; then 

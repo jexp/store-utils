@@ -4,6 +4,8 @@ import org.neo4j.collection.primitive.Primitive;
 import org.neo4j.collection.primitive.PrimitiveLongLongMap;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
+import org.neo4j.graphdb.factory.EnterpriseGraphDatabaseFactory;
+
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.helpers.collection.MapUtil;
@@ -117,7 +119,8 @@ public class StoreCopy {
     }
 
     private static Pair<Long, Long> getHighestNodeId(File source) {
-        GraphDatabaseAPI api = (GraphDatabaseAPI) new GraphDatabaseFactory().newEmbeddedDatabase(source);
+		// EnterpriseGraphDatabaseFactory
+        GraphDatabaseAPI api = (GraphDatabaseAPI) new EnterpriseGraphDatabaseFactory().newEmbeddedDatabase(source);
         IdGeneratorFactory idGenerators = api.getDependencyResolver().resolveDependency(IdGeneratorFactory.class);
         long highestNodeId = idGenerators.get(IdType.NODE).getHighestPossibleIdInUse();
         long highestRelId = idGenerators.get(IdType.RELATIONSHIP).getHighestPossibleIdInUse();
