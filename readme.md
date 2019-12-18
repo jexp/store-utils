@@ -1,5 +1,7 @@
 ## Tool to copy Neo4j Stores
 
+From Neo4j 4.0 please use the [official tool](https://neo4j.com/docs/operations-manual/4.0/tools/copy/) that has the same capabilities.
+
 Uses the BatchInserterImpl to read a store and write the target store keeping the node-ids.
 Copies the manual (legacy) index-files as is, please note it performs no index upgrade!
 
