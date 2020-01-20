@@ -117,8 +117,16 @@ public class StoreCopy {
         }
     }
 
+    private static GraphDatabaseFactory factory() {
+        try {
+           return (GraphDatabaseFactory)Class.forName("org.neo4j.graphdb.factory.EnterpriseGraphDatabaseFactory").newInstance();
+       } catch(ClassNotFoundException | InstantiationException | IllegalAccessException e) {
+           return new GraphDatabaseFactory();
+       }
+    }
+
     private static Pair<Long, Long> getHighestNodeId(File source) {
-        GraphDatabaseAPI api = (GraphDatabaseAPI) new GraphDatabaseFactory().newEmbeddedDatabase(source);
+        GraphDatabaseAPI api = (GraphDatabaseAPI)factory().newEmbeddedDatabase(source);
         IdGeneratorFactory idGenerators = api.getDependencyResolver().resolveDependency(IdGeneratorFactory.class);
         long highestNodeId = idGenerators.get(IdType.NODE).getHighestPossibleIdInUse();
         long highestRelId = idGenerators.get(IdType.RELATIONSHIP).getHighestPossibleIdInUse();
