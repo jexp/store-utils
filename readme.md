@@ -20,14 +20,19 @@ You can now also decide if you want to compact the node-store, then you have to 
 ### Usage
 
 Grab the release for your Neo4j version from: https://github.com/jexp/store-utils/releases
+
 Define the $NEO4J_HOME, the $NEO4J_HOME/lib should contain all the jars
 
 ```
 unzip store-util-*-release.zip 
 cd store-util-*/
 
-#MANDATORY: maven and internet access will be required if not set properly
+#feel free to change this
 export NEO4J_HOME=/usr/share/neo4j
+
+#IMPORTANT: maven and internet access will be required if NEO4J_HOME is not set properly
+[ ! $(ls $NEO4J_HOME/lib/*) ] && echo "NEO4J_HOME does not contain the libraries, will fall back to maven"
+
 
 # remove target db
 rm -rf /path/to/fixed.db
