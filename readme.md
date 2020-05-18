@@ -1,3 +1,7 @@
+## Notice
+
+Please download a released version, else you must have Apache Maven. (Apache Maven not installed)
+
 ## Tool to copy Neo4j Stores
 
 From Neo4j 4.0 please use the [official tool](https://neo4j.com/docs/operations-manual/4.0/tools/copy/) that has the same capabilities.
