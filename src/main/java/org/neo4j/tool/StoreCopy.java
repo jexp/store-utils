@@ -4,6 +4,7 @@ import org.eclipse.collections.api.map.primitive.LongLongMap;
 import org.eclipse.collections.api.map.primitive.MutableLongLongMap;
 import org.eclipse.collections.impl.map.mutable.primitive.LongLongHashMap;
 import org.neo4j.graphdb.*;
+import org.neo4j.graphdb.factory.*;
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.helpers.collection.MapUtil;
@@ -208,8 +209,11 @@ public class StoreCopy {
     }
 
     private static boolean createRelationship(BatchInserter targetDb, BatchInserter sourceDb, BatchRelationship rel, Set<String> ignoreProperties, LongLongMap copiedNodeIds) {
-        long startNodeId = copiedNodeIds.get(rel.getStartNode());
-        long endNodeId = copiedNodeIds.get(rel.getEndNode());
+        long startNodeId = rel.getStartNode(), endNodeId = rel.getEndNode();
+        if (copiedNodeIds != null) {
+           startNodeId = copiedNodeIds.get(startNodeId);
+           endNodeId = copiedNodeIds.get(endNodeId);
+        }
         if (startNodeId == -1L || endNodeId == -1L) return false;
         final RelationshipType type = rel.getType();
         try {
@@ -224,7 +228,7 @@ public class StoreCopy {
     }
 
     private static LongLongMap copyNodes(BatchInserter sourceDb, BatchInserter targetDb, Set<String> ignoreProperties, Set<String> ignoreLabels, Set<String> deleteNodesWithLabels, long highestNodeId, Flusher flusher, boolean stableNodeIds) {
-        MutableLongLongMap copiedNodes = stableNodeIds ? new LongLongHashMap() : new LongLongHashMap(10_000_000);
+        MutableLongLongMap copiedNodes = stableNodeIds ? new LongLongHashMap() : null;
         long time = System.currentTimeMillis();
         long node = 0;
         long notFound = 0;
@@ -235,13 +239,12 @@ public class StoreCopy {
                     if (labelInSet(sourceDb.getNodeLabels(node),deleteNodesWithLabels)) {
                         removed ++;
                     } else {
-                        long newNodeId=node;
                         if (stableNodeIds) {
                             targetDb.createNode(node, getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node, ignoreLabels));
                         } else {
-                            newNodeId = targetDb.createNode(getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node, ignoreLabels));
+                            long newNodeId = targetDb.createNode(getProperties(sourceDb.getNodeProperties(node), ignoreProperties), labelsArray(sourceDb, node, ignoreLabels));
+                            copiedNodes.put(node,newNodeId);
                         }
-                        copiedNodes.put(node,newNodeId);
                     }
                 } else {
                     notFound++;
