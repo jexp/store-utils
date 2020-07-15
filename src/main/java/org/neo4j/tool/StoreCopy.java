@@ -4,7 +4,6 @@ import org.eclipse.collections.api.map.primitive.LongLongMap;
 import org.eclipse.collections.api.map.primitive.MutableLongLongMap;
 import org.eclipse.collections.impl.map.mutable.primitive.LongLongHashMap;
 import org.neo4j.graphdb.*;
-import org.neo4j.graphdb.factory.*;
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.helpers.collection.MapUtil;
@@ -32,7 +31,7 @@ public class StoreCopy {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
-            System.err.println("Usage: StoryCopy source target [rel,types,to,ignore] [properties,to,ignore] [labels,to,ignore] [labels,to,delete]");
+            System.err.println("Usage: Store-Copy source target [rel,types,to,ignore] [properties,to,ignore] [labels,to,ignore] [labels,to,delete]");
             return;
         }
         Properties properties = new Properties();
@@ -75,19 +74,29 @@ public class StoreCopy {
         Pair<Long, Long> highestIds = getHighestNodeId(source);
         String pageCacheSize = System.getProperty("dbms.pagecache.memory","2G");
         BatchInserter targetDb = BatchInserters.inserter(target, MapUtil.stringMap("dbms.pagecache.memory", pageCacheSize));
-        BatchInserter sourceDb = BatchInserters.inserter(source, MapUtil.stringMap("dbms.pagecache.memory", System.getProperty("dbms.pagecache.memory.source",pageCacheSize)));
+        Map<String, String> sourceDbProperties = MapUtil.stringMap(
+                "dbms.pagecache.memory", System.getProperty("dbms.pagecache.memory.source", pageCacheSize),
+                "dbms.read_only", System.getProperty("dbms.read_only.source", "false")
+        );
+        BatchInserter sourceDb = BatchInserters.inserter(source,sourceDbProperties);
         Flusher flusher = getFlusher(sourceDb);
 
-        logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
+        logs = new PrintWriter(new FileWriter(new File(target, "    store-copy.log")));
 
         LongLongMap copiedNodeIds = copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, deleteNodesWithLabels, highestIds.first(),flusher, stableNodeIds);
         copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, copiedNodeIds, highestIds.other(), flusher);
+
+        System.out.println("Stopping target database");
         targetDb.shutdown();
+        System.out.println("Target database stopped");
         try {
+            System.out.println("Stopping source database");
             sourceDb.shutdown();
         } catch (Exception e) {
             logs.append(String.format("Noncritical error closing the source database:%n%s", Exceptions.stringify(e)));
         }
+
+        System.out.println("Source database stopped");
         logs.close();
         if (stableNodeIds) copyIndex(source, target);
     }
