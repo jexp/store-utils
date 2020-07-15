@@ -81,7 +81,7 @@ public class StoreCopy {
         BatchInserter sourceDb = BatchInserters.inserter(source,sourceDbProperties);
         Flusher flusher = getFlusher(sourceDb);
 
-        logs = new PrintWriter(new FileWriter(new File(target, "    store-copy.log")));
+        logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
 
         LongLongMap copiedNodeIds = copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, deleteNodesWithLabels, highestIds.first(),flusher, stableNodeIds);
         copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, copiedNodeIds, highestIds.other(), flusher);
