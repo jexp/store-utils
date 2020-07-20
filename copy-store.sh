@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# NEO4J_HOME=${NEO4J_HOME-/var/lib/neo4j}
+NEO4J_HOME=${NEO4J_HOME-/usr/share/neo4j}
 EDITION=${1-community}
 shift
 SRC=$1
@@ -14,7 +14,7 @@ HEAP=4G
 CACHE=2G
 CACHE_SRC=1G
 #$CACHE
-echo "To use your existing Neo4j 3.3.x installation set NEO4J_HOME to your Neo4j directory. Currently set to: $NEO4J_HOME"
+echo "To use your existing Neo4j 3.5.x installation set NEO4J_HOME to your Neo4j directory. Currently set to: $NEO4J_HOME"
 echo "Usage: copy-store.sh [community|enterprise] source.db target.db [RELS,TO,SKIP] [props,to,skip] [Labels,To,Skip] [Labels,To,Delete,Nodes]"
 
 if [[ "$EDITION" != "enterprise" && "$EDITION" != "community" ]]
@@ -48,6 +48,10 @@ if [[ -d "$NEO4J_HOME" && -f "$JARFILE" ]]; then
    java $MAVEN_OPTS -Ddbms.pagecache.memory=$CACHE -Ddbms.pagecache.memory.source=$CACHE_SRC -classpath "$NEO4J_HOME/lib/*":$JARFILE org.neo4j.tool.StoreCopy \
    $SRC $DST $SKIP_RELS $SKIP_PROPS $SKIP_LABELS $DELETE_NODES $KEEP_NODE_IDS
 else
+   echo "WARNING: $NEO4J_HOME/lib does not contain any jar or store-util-*.jar file is not in the current folder."
+   echo "NEO4J_HOME is : '${NEO4J_HOME}'"
+   echo "store-util is : '${JARFILE}'"
+   echo "Falling back to maven"
    if [[ ! -f $MAVEN ]]; then 
       echo "Apache Maven not installed"
    else

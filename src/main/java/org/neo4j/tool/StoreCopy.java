@@ -74,20 +74,26 @@ public class StoreCopy {
 
         Pair<Long, Long> highestIds = getHighestNodeId(source);
         String pageCacheSize = System.getProperty("dbms.pagecache.memory","2G");
-        BatchInserter targetDb = BatchInserters.inserter(target, MapUtil.stringMap("dbms.pagecache.memory", pageCacheSize));
-        BatchInserter sourceDb = BatchInserters.inserter(source, MapUtil.stringMap("dbms.pagecache.memory", System.getProperty("dbms.pagecache.memory.source",pageCacheSize)));
+        Map<String,String> targetConfig = MapUtil.stringMap("dbms.pagecache.memory", pageCacheSize);
+        BatchInserter targetDb = BatchInserters.inserter(target, targetConfig);
+        Map<String,String> sourceConfig = MapUtil.stringMap("dbms.pagecache.memory", System.getProperty("dbms.pagecache.memory.source",pageCacheSize), "dbms.read_only", "true");
+        BatchInserter sourceDb = BatchInserters.inserter(source, sourceConfig);
         Flusher flusher = getFlusher(sourceDb);
 
         logs = new PrintWriter(new FileWriter(new File(target, "store-copy.log")));
 
         LongLongMap copiedNodeIds = copyNodes(sourceDb, targetDb, ignoreProperties, ignoreLabels, deleteNodesWithLabels, highestIds.first(),flusher, stableNodeIds);
         copyRelationships(sourceDb, targetDb, ignoreRelTypes, ignoreProperties, copiedNodeIds, highestIds.other(), flusher);
+        System.out.println("Stopping target database");
         targetDb.shutdown();
+        System.out.println("Stopped target database");
         try {
+            System.out.println("Stopping source database");
             sourceDb.shutdown();
         } catch (Exception e) {
             logs.append(String.format("Noncritical error closing the source database:%n%s", Exceptions.stringify(e)));
         }
+        System.out.println("Stopped source database");
         logs.close();
         if (stableNodeIds) copyIndex(source, target);
     }
